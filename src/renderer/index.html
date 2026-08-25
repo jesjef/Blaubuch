@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <!-- Rein lokale App: nichts wird nachgeladen, nichts geht hinaus. -->
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'none'; style-src 'self'; script-src 'self'; font-src 'self'; img-src 'self' data:; form-action 'none'; base-uri 'none'">
+  <title>Blaubuch</title>
+  <!-- Blockierend und vor dem Stylesheet: verhindert, dass beim Start
+       kurz die falsche Darstellung aufblitzt. -->
+  <script src="thema-fruh.js"></script>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-inner">
+    <span class="wordmark"><span class="dot" aria-hidden="true"></span>Blaubuch</span>
+
+    <nav class="month-nav" aria-label="Monat">
+      <button type="button" class="icon" id="undo" title="Rückgängig" aria-label="Rückgängig" disabled>↩</button>
+      <button type="button" class="icon" id="prev-month" title="Vorheriger Monat" aria-label="Vorheriger Monat">‹</button>
+      <select id="month-select" aria-label="Monat wählen"></select>
+      <button type="button" class="icon" id="next-month" title="Nächster Monat" aria-label="Nächster Monat">›</button>
+      <button type="button" class="btn-ghost" id="new-month">+ Monat</button>
+    </nav>
+
+    <div class="save-zone">
+      <button type="button" class="btn-save" id="save" disabled>Speichern</button>
+      <span class="save-state" id="save-state">Geladen</span>
+      <button type="button" class="icon" id="privat" title="Beträge verbergen">👁</button>
+      <button type="button" class="icon" id="thema" title="Darstellung wechseln">◐</button>
+      <button type="button" class="icon" id="einstellungen" title="Einstellungen" aria-label="Einstellungen">⚙</button>
+    </div>
+
+    <form class="newmonth-form" id="newmonth-form" hidden>
+      <label class="nm-label" for="newmonth-input">Neuer Monat</label>
+      <input type="month" id="newmonth-input">
+      <button type="submit" class="btn-primary">Anlegen</button>
+      <button type="button" class="btn-plain" id="newmonth-cancel">Abbrechen</button>
+    </form>
+  </div>
+</header>
+
+<main id="app"></main>
+
+<p id="live" class="sr-only" role="status" aria-live="polite"></p>
+
+<script type="module" src="app.mjs"></script>
+</body>
+</html>

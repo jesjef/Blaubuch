@@ -1,0 +1,23 @@
+node_modules/
+dist/
+
+# Aus den @fontsource-Paketen erzeugt — `npm run fonts` stellt sie wieder her.
+src/renderer/fonts/
+
+# Aus tools/make-icon.mjs und tools/make-icns.mjs erzeugt —
+# `npm run assets` stellt sie wieder her.
+build/icon.ico
+build/icon.png
+build/icon.icns
+
+# Persoenliche Daten gehoeren niemals ins Repository.
+blaubuch.json
+*.local.json
+
+# Betriebssystem
+Thumbs.db
+.DS_Store
+desktop.ini
+
+# Eigene Suchbegriffe fuer tools/check-secrets.mjs — NIEMALS committen.
+.secretwords

@@ -1,0 +1,826 @@
+/* Blaubuch — Gestaltung.
+ *
+ * Alle Farben, Abstände, Radien und Schriftgrössen kommen aus den Tokens
+ * unter :root. Kein Wert wird irgendwo unten hart eingetragen — wer das
+ * Erscheinungsbild ändern will, ändert die Tokens.
+ *
+ * Das Layout arbeitet durchgehend mit `auto-fit`-Rastern statt mit festen
+ * Umbruchpunkten: Karten fliessen je nach verfügbarer Breite in eine, zwei
+ * oder drei Spalten. Alle Grössen sind in `rem`, damit die Zoomstufen des
+ * Programms (Strg +/−) alles gleichmässig mitskalieren.
+ */
+
+@font-face {
+  font-family: "Sora"; font-style: normal; font-weight: 600; font-display: swap;
+  src: url("fonts/sora-latin-600-normal.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Sora"; font-style: normal; font-weight: 700; font-display: swap;
+  src: url("fonts/sora-latin-700-normal.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Instrument Sans"; font-style: normal; font-weight: 400; font-display: swap;
+  src: url("fonts/instrument-sans-latin-400-normal.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Instrument Sans"; font-style: normal; font-weight: 500; font-display: swap;
+  src: url("fonts/instrument-sans-latin-500-normal.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Instrument Sans"; font-style: normal; font-weight: 600; font-display: swap;
+  src: url("fonts/instrument-sans-latin-600-normal.woff2") format("woff2");
+}
+
+:root {
+  /* --- Farbton ---
+     Das gesamte Erscheinungsbild hängt an einem einzigen Ton. Gemessen
+     an der ursprünglichen Palette lagen alle Farben zwischen 267 und 277 —
+     also wird der Ton herausgezogen und alles darüber gebildet. Helligkeit
+     und Buntheit jedes Tokens bleiben dabei exakt wie zuvor; nur der Ton
+     wandert. Ein anderes Farbschema setzt deshalb nur `--h` neu.
+
+     Warum nur Töne zwischen 195 und 335 zur Wahl stehen: Rot, Grün und
+     Gelb sind als Statusfarben vergeben (Ausgabe, Investition, Warnung).
+     Ein Akzent in ihrer Nähe würde die Bedeutung verwischen. */
+  --h: 272;
+
+  /* --- Farben: hell --- */
+  --blue: oklch(0.418 0.217 var(--h));
+  --blue-deep: oklch(0.305 0.153 var(--h));
+  --blue-soft: oklch(0.945 0.021 var(--h));
+  --blue-line: oklch(0.867 0.045 var(--h));
+  --ground: oklch(0.974 0.010 var(--h));
+  --card: #FFFFFF;
+  --field: oklch(0.980 0.007 var(--h));
+  --ink: oklch(0.229 0.059 var(--h));
+  --ink-mute: oklch(0.503 0.057 var(--h));
+  --line: oklch(0.926 0.019 var(--h));
+  --focus: var(--blue);
+  --schatten: 0 1px 2px rgb(0 0 0 / 0.05);
+
+  /* Status ist bedeutungstragend und folgt dem Akzent NICHT. */
+  --rot: #C6303E;
+  --rot-soft: #FBE9EB;
+  --gruen: #1E8A4C;
+  --gelb: #B4850E;
+  --gelb-soft: #FBF3DC;
+
+  /* --- Schrift --- */
+  --display: "Sora", "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif;
+  --body: "Instrument Sans", "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+
+  --text-xs: 0.72rem;
+  --text-sm: 0.82rem;
+  --text-md: 0.94rem;
+  --text-lg: 1.1rem;
+  --text-xl: clamp(1.35rem, 1.1rem + 0.8vw, 1.7rem);
+
+  /* --- Abstände --- */
+  --sp-1: 0.25rem;
+  --sp-2: 0.5rem;
+  --sp-3: 0.75rem;
+  --sp-4: 1rem;
+  --sp-5: 1.5rem;
+  --sp-6: 2rem;
+
+  /* --- Formen --- */
+  --r-sm: 8px;
+  --r-md: 12px;
+  --r-lg: 16px;
+
+  /* --- Diagrammfarben ---
+     Die vier Kostenblöcke sind geordnete Grössen, keine gleichrangigen
+     Kategorien: ein sequenzieller Ein-Ton-Verlauf, nach Betrag sortiert,
+     grösster Block am dunkelsten. Die *Helligkeit* trägt die Information —
+     deshalb bleibt der Verlauf auch bei einem anderen Farbton lesbar und
+     bei Farbsehschwäche unterscheidbar. Grün und Rot sind Status. */
+  --serie-0: oklch(0.305 0.153 var(--h));
+  --serie-1: oklch(0.461 0.207 var(--h));
+  --serie-2: oklch(0.548 0.180 var(--h));
+  /* 0.630 statt 0.661: bei türkisnahen Tönen ist dieselbe OKLCH-Helligkeit
+     in der sRGB-Leuchtdichte heller, und die Stufe fiel unter 3:1 gegen
+     Weiss. Gemessen liegt der schlechteste Fall (Petrol) jetzt bei 3.18. */
+  --serie-3: oklch(0.630 0.138 var(--h));
+  --serie-quelle: oklch(0.694 0.062 var(--h));
+  --serie-nabe: oklch(0.503 0.057 var(--h));
+  --serie-rest: var(--gruen);
+  --serie-luecke: var(--rot);
+
+  /* --- Masse, die über alle Karten hinweg fluchten müssen --- */
+  --amount-w: 5rem;
+  --action-w: 1.75rem;
+  --spalte-min: 19rem;
+  --inhalt-max: 78rem;
+  --zeile-h: 2.25rem;
+}
+
+/* Farbschemata setzen ausschliesslich den Ton. Ein weiteres Schema ist
+   eine Zeile — die Helligkeitsleiter und damit Kontrast und Lesbarkeit
+   bleiben unangetastet. */
+:root[data-farbe="petrol"] { --h: 205; }
+:root[data-farbe="violett"] { --h: 300; }
+:root[data-farbe="beere"] { --h: 335; }
+:root[data-farbe="schiefer"] { --h: 250; }
+
+/* --- Dunkel: eigene Helligkeitsstufen, derselbe Ton --- */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --blue: oklch(0.725 0.126 var(--h));
+    --blue-deep: oklch(0.834 0.074 var(--h));
+    --blue-soft: oklch(0.281 0.084 var(--h));
+    --blue-line: oklch(0.354 0.086 var(--h));
+    --ground: oklch(0.187 0.047 var(--h));
+    --card: oklch(0.236 0.062 var(--h));
+    --field: oklch(0.211 0.054 var(--h));
+    --ink: oklch(0.947 0.019 var(--h));
+    --ink-mute: oklch(0.722 0.056 var(--h));
+    --line: oklch(0.317 0.075 var(--h));
+    --schatten: none;
+
+    --rot: #F08894;
+    --rot-soft: #3A1B22;
+    --gruen: #6FCB95;
+    --gelb: #E5C05C;
+    --gelb-soft: #352A0E;
+
+    --serie-0: oklch(0.896 0.046 var(--h));
+    --serie-1: oklch(0.787 0.092 var(--h));
+    --serie-2: oklch(0.675 0.133 var(--h));
+    --serie-3: oklch(0.570 0.149 var(--h));
+    --serie-quelle: oklch(0.577 0.078 var(--h));
+    --serie-nabe: oklch(0.722 0.056 var(--h));
+  }
+}
+
+:root[data-theme="dark"] {
+  --blue: oklch(0.725 0.126 var(--h));
+  --blue-deep: oklch(0.834 0.074 var(--h));
+  --blue-soft: oklch(0.281 0.084 var(--h));
+  --blue-line: oklch(0.354 0.086 var(--h));
+  --ground: oklch(0.187 0.047 var(--h));
+  --card: oklch(0.236 0.062 var(--h));
+  --field: oklch(0.211 0.054 var(--h));
+  --ink: oklch(0.947 0.019 var(--h));
+  --ink-mute: oklch(0.722 0.056 var(--h));
+  --line: oklch(0.317 0.075 var(--h));
+  --schatten: none;
+
+  --rot: #F08894;
+  --rot-soft: #3A1B22;
+  --gruen: #6FCB95;
+  --gelb: #E5C05C;
+  --gelb-soft: #352A0E;
+
+  --serie-0: oklch(0.896 0.046 var(--h));
+  --serie-1: oklch(0.787 0.092 var(--h));
+  --serie-2: oklch(0.675 0.133 var(--h));
+  --serie-3: oklch(0.570 0.149 var(--h));
+  --serie-quelle: oklch(0.577 0.078 var(--h));
+  --serie-nabe: oklch(0.722 0.056 var(--h));
+}
+
+/* ------------------------------------------------------------------ *
+ * Grundlagen
+ * ------------------------------------------------------------------ */
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--ground);
+  color: var(--ink);
+  font-family: var(--body);
+  font-size: var(--text-md);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+}
+
+h1, h2, h3 { font-family: var(--display); margin: 0; text-wrap: balance; }
+button, input, select { font: inherit; color: inherit; }
+button { cursor: pointer; }
+input { user-select: text; }
+:is(button, input, select):focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+
+.sr-only {
+  position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0;
+  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+
+/* Eine einzige Knopfform, dreimal eingefärbt. */
+.btn-primary, .btn-ghost, .btn-plain, .btn-save, .btn-tool, .btn-report, .gate-submit {
+  border-radius: var(--r-sm);
+  font-weight: 600;
+  font-size: var(--text-sm);
+  padding: 0.42rem 0.85rem;
+  border: 1px solid transparent;
+  white-space: nowrap;
+  transition: background-color 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+}
+@media (prefers-reduced-motion: reduce) {
+  .btn-primary, .btn-ghost, .btn-plain, .btn-save, .btn-tool, .btn-report, .gate-submit { transition: none; }
+}
+
+.btn-primary, .btn-report, .gate-submit { background: var(--blue); color: #fff; border-color: var(--blue); }
+.btn-primary:hover:enabled, .btn-report:hover:enabled, .gate-submit:hover:enabled {
+  background: var(--blue-deep); border-color: var(--blue-deep);
+}
+
+.btn-ghost, .btn-tool { background: var(--card); color: var(--ink); border-color: var(--line); }
+.btn-ghost:hover, .btn-tool:hover { border-color: var(--blue); color: var(--blue); }
+
+.btn-plain { background: none; color: var(--ink-mute); border-color: transparent; }
+.btn-plain:hover { color: var(--ink); }
+
+/* Unwiderrufliches sieht erst beim Zeigen gefaehrlich aus — im Ruhezustand
+   soll es nicht die Aufmerksamkeit auf sich ziehen. */
+.btn-tool.danger:hover { border-color: var(--rot); color: var(--rot); background: var(--rot-soft); }
+
+button.icon {
+  border: 1px solid var(--line); background: var(--card); border-radius: var(--r-sm);
+  width: var(--zeile-h); height: var(--zeile-h); line-height: 1; color: var(--ink); padding: 0;
+}
+button.icon:hover:enabled { border-color: var(--blue); color: var(--blue); }
+button.icon:disabled { opacity: 0.4; cursor: default; }
+
+/* ------------------------------------------------------------------ *
+ * Kopfleiste
+ * ------------------------------------------------------------------ */
+
+.topbar {
+  background: var(--card);
+  border-bottom: 1px solid var(--line);
+  position: sticky; top: 0; z-index: 20;
+}
+.topbar-inner {
+  max-width: var(--inhalt-max); margin: 0 auto;
+  padding: var(--sp-3) var(--sp-4);
+  display: flex; align-items: center; gap: var(--sp-3); flex-wrap: wrap;
+}
+.wordmark {
+  font-family: var(--display); font-weight: 700; font-size: var(--text-lg);
+  color: var(--blue); letter-spacing: -0.01em;
+  display: flex; align-items: center; gap: var(--sp-2);
+}
+.wordmark .dot {
+  width: 0.6rem; height: 0.6rem; border-radius: 2px;
+  background: var(--blue); display: inline-block; transform: rotate(45deg);
+}
+
+.month-nav { display: flex; align-items: center; gap: var(--sp-1); flex-wrap: wrap; }
+.month-nav select {
+  border: 1px solid var(--line); background: var(--card); border-radius: var(--r-sm);
+  padding: 0.35rem 0.5rem; font-weight: 600; font-size: var(--text-sm);
+  min-width: 9.5rem; height: var(--zeile-h);
+}
+
+.save-zone { display: flex; align-items: center; gap: var(--sp-2); margin-left: auto; }
+.btn-save { background: var(--blue); color: #fff; border-color: var(--blue); }
+.btn-save:hover:enabled { background: var(--blue-deep); border-color: var(--blue-deep); }
+.btn-save:disabled { background: var(--card); color: var(--ink-mute); border-color: var(--line); cursor: default; }
+.save-state { font-size: var(--text-xs); color: var(--ink-mute); min-width: 7rem; }
+.save-state.dirty { color: var(--gelb); font-weight: 600; }
+.save-state.err { color: var(--rot); font-weight: 600; }
+
+.newmonth-form {
+  display: flex; width: 100%; align-items: center; gap: var(--sp-2); flex-wrap: wrap;
+  padding-top: var(--sp-3); border-top: 1px dashed var(--line);
+}
+.newmonth-form[hidden] { display: none; }
+.newmonth-form input[type="month"] {
+  border: 1px solid var(--line); background: var(--field); border-radius: var(--r-sm);
+  padding: 0.32rem 0.5rem; height: var(--zeile-h);
+}
+.nm-label { font-size: var(--text-sm); color: var(--ink-mute); }
+
+/* ------------------------------------------------------------------ *
+ * Seitenraster
+ * ------------------------------------------------------------------ */
+
+main {
+  max-width: var(--inhalt-max); margin: 0 auto;
+  padding: var(--sp-4) var(--sp-4) var(--sp-6);
+  display: grid; gap: var(--sp-4);
+}
+
+.notice {
+  border-radius: var(--r-md); padding: var(--sp-3) var(--sp-4); font-size: var(--text-sm);
+  display: flex; gap: var(--sp-3); align-items: center;
+  background: var(--blue-soft); border: 1px solid var(--blue-line); color: var(--ink);
+}
+.notice.warn { background: var(--gelb-soft); border-color: var(--gelb); }
+.notice.err { background: var(--rot-soft); border-color: var(--rot); }
+.notice button {
+  margin-left: auto; border: none; background: none; color: var(--ink-mute);
+  font-size: var(--text-lg); line-height: 1; padding: 0 var(--sp-1);
+}
+.notice button:hover { color: var(--ink); }
+
+/**
+ * Rasterelemente haben von sich aus `min-width: auto` und wachsen damit
+ * auf ihren längsten unumbrechbaren Inhalt — ein einziger langer Name
+ * sprengt sonst die Spalte und die Seite scrollt seitwärts.
+ * Dasselbe gilt für Flex-Kinder, die kürzbar sein sollen.
+ */
+.summary > *, .sections > *, .analyse-spalten > *,
+.insights > *, .breakdown > *, .row > *,
+section.card > *, .e-reihe > *, .e-wahl > *, main > * { min-width: 0; }
+
+/* Kennzahlen und Erfassungskarten teilen sich dieselbe Rastermechanik. */
+.summary {
+  display: grid; gap: var(--sp-4);
+  grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+}
+/* Ohne `align-items: start` strecken sich alle Karten einer Zeile auf die
+   Höhe der höchsten. Sonst endet eine Karte mit zwei Zeilen mitten im Raster
+   und hinterlässt ein Loch. */
+.sections {
+  display: grid; gap: var(--sp-4);
+  grid-template-columns: repeat(auto-fit, minmax(var(--spalte-min), 1fr));
+}
+
+.stat {
+  background: var(--card); border: 1px solid var(--line); border-radius: var(--r-lg);
+  padding: var(--sp-4); box-shadow: var(--schatten);
+}
+.stat .label {
+  font-size: var(--text-xs); text-transform: uppercase; letter-spacing: 0.09em;
+  font-weight: 600; color: var(--ink-mute);
+}
+.stat .value {
+  font-family: var(--display); font-weight: 700; font-size: var(--text-xl);
+  font-variant-numeric: tabular-nums; margin-top: var(--sp-1); letter-spacing: -0.01em;
+}
+.stat .sub {
+  font-size: var(--text-xs); color: var(--ink-mute);
+  margin-top: var(--sp-1); font-variant-numeric: tabular-nums;
+}
+.stat.neg .value { color: var(--rot); }
+.stat.pos .value { color: var(--gruen); }
+
+/* ------------------------------------------------------------------ *
+ * Karten
+ * ------------------------------------------------------------------ */
+
+section.card {
+  background: var(--card); border: 1px solid var(--line); border-radius: var(--r-lg);
+  padding: var(--sp-4); box-shadow: var(--schatten);
+  display: flex; flex-direction: column; gap: var(--sp-1);
+}
+section.card > header {
+  display: flex; align-items: baseline; gap: var(--sp-3);
+  padding-bottom: var(--sp-3); margin-bottom: var(--sp-1);
+  border-bottom: 1px solid var(--line);
+}
+section.card h2 { font-size: var(--text-md); font-weight: 700; }
+section.card header .total {
+  margin-left: auto; font-variant-numeric: tabular-nums;
+  font-weight: 600; font-size: var(--text-sm); color: var(--blue-deep);
+}
+.hint { font-size: var(--text-xs); color: var(--ink-mute); margin: 0 0 var(--sp-2); }
+
+/* Erklärung am Kartenkopf: sichtbar auf Zeiger UND Tastaturfokus, sonst
+   gäbe es sie für Tastaturbenutzer gar nicht. Sie liegt über dem Inhalt,
+   damit sie das Kartenlayout nicht verschiebt. */
+.hinweis-halter { position: relative; display: inline-flex; }
+.hinweis-marke {
+  border: 1px solid var(--line); background: var(--card); color: var(--ink-mute);
+  width: 1.15rem; height: 1.15rem; border-radius: 999px; padding: 0;
+  font-size: 0.7rem; font-weight: 700; line-height: 1;
+}
+.hinweis-marke:hover, .hinweis-marke:focus-visible { border-color: var(--blue); color: var(--blue); }
+
+.hinweis-blase {
+  position: absolute; top: calc(100% + 0.4rem); left: 50%; transform: translateX(-50%);
+  z-index: 30; width: max-content; max-width: 17rem;
+  background: var(--ink); color: var(--card);
+  border-radius: var(--r-sm); padding: var(--sp-2) var(--sp-3);
+  font-size: var(--text-xs); font-weight: 400; line-height: 1.45;
+  white-space: normal; text-align: left;
+  opacity: 0; visibility: hidden; transition: opacity 0.12s ease;
+  box-shadow: 0 4px 12px rgb(0 0 0 / 0.2);
+}
+/* `:focus-within` statt `:focus-visible`: der Hinweis muss erscheinen,
+   sobald die Marke den Fokus hat — unabhängig davon, ob der Browser die
+   Eingabe als Tastaturnutzung einstuft. */
+.hinweis-halter:hover .hinweis-blase,
+.hinweis-halter:focus-within .hinweis-blase {
+  opacity: 1; visibility: visible;
+}
+@media (prefers-reduced-motion: reduce) { .hinweis-blase { transition: none; } }
+
+/* Am rechten Rand würde die Blase sonst aus der Karte laufen. */
+section.card:last-child .hinweis-blase,
+.sections > .card:nth-child(3n) .hinweis-blase { left: auto; right: 0; transform: none; }
+
+/* ------------------------------------------------------------------ *
+ * Zeilen — dieselbe Grammatik in jeder Karte:
+ * [Markierung] [Bezeichnung] [Zahl…] [Aktion]
+ * ------------------------------------------------------------------ */
+
+.row {
+  display: flex; align-items: center; gap: var(--sp-2);
+  min-height: var(--zeile-h);
+}
+.row + .row { border-top: 1px dashed var(--line); }
+.row .name {
+  flex: 1; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+/* Die Bezeichnung ist ein Knopf ohne Knopfaussehen — erst beim Anklicken
+   wird daraus ein Eingabefeld. So bleibt die Kachel ruhig und lässt sich
+   trotzdem direkt umbenennen. */
+.name-text {
+  border: none; background: none; color: inherit; font: inherit;
+  padding: 0.15rem 0.3rem; margin-left: -0.3rem;
+  border-radius: 6px; text-align: left; width: 100%;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.name-text:hover { background: var(--blue-soft); color: var(--blue-deep); }
+.name-text[hidden] { display: none; }
+
+.name-eingabe {
+  width: 100%; font: inherit; color: var(--ink);
+  border: 1px solid var(--blue); border-radius: 6px; background: var(--card);
+  padding: 0.15rem 0.3rem; margin-left: -0.3rem;
+}
+.name-eingabe[hidden] { display: none; }
+
+.row.kopfzeile {
+  min-height: 0; padding-bottom: var(--sp-1); border-bottom: 1px solid var(--line);
+  font-size: var(--text-xs); text-transform: uppercase; letter-spacing: 0.08em;
+  font-weight: 600; color: var(--ink-mute);
+}
+.row.kopfzeile + .row { border-top: none; }
+.row.kopfzeile .num { width: var(--amount-w); text-align: right; flex: none; }
+.row.kopfzeile .platzhalter { width: var(--action-w); flex: none; }
+
+input.amount, input.text {
+  border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--field);
+  padding: 0.32rem 0.5rem; color: var(--ink); font-size: var(--text-sm);
+  height: 1.9rem;
+}
+input.amount {
+  width: var(--amount-w); flex: none;
+  text-align: right; font-variant-numeric: tabular-nums;
+}
+input.amount:focus, input.text:focus { border-color: var(--blue); background: var(--card); }
+input.amount.zero { color: var(--ink-mute); }
+input::placeholder { color: var(--ink-mute); opacity: 0.6; }
+
+.tag {
+  border: none; border-radius: 999px; width: 0.85rem; height: 0.85rem;
+  flex: none; padding: 0;
+}
+.tag.rot { background: var(--rot); }
+.tag.gruen { background: var(--gruen); }
+.tag.gelb { background: var(--gelb); }
+
+.del {
+  border: none; background: none; color: var(--ink-mute);
+  font-size: var(--text-lg); line-height: 1;
+  width: var(--action-w); height: var(--action-w); flex: none;
+  border-radius: var(--r-sm); padding: 0;
+}
+.del:hover { color: var(--rot); background: var(--rot-soft); }
+
+/* ------------------------------------------------------------------ *
+ * Hinzufügen
+ * ------------------------------------------------------------------ */
+
+/* Der Knopf sitzt am unteren Rand der Karte. Streckt sich die Karte auf
+   die Zeilenhöhe, wächst der Abstand darüber statt darunter — die Karte
+   wirkt gefüllt statt abgeschnitten. */
+.add-line { margin-top: auto; padding-top: var(--sp-2); }
+.add-line .opener {
+  border: 1px dashed var(--blue-line); color: var(--blue); background: none;
+  border-radius: var(--r-sm); padding: 0.35rem 0.7rem;
+  font-weight: 600; font-size: var(--text-sm); width: 100%;
+}
+.add-line .opener:hover { background: var(--blue-soft); border-style: solid; }
+.add-line .opener[hidden] { display: none; }
+
+.add-form { display: flex; gap: var(--sp-2); align-items: center; flex-wrap: wrap; }
+.add-form[hidden] { display: none; }
+.add-form input.text { flex: 1 1 8rem; min-width: 0; }
+
+/* ------------------------------------------------------------------ *
+ * Kreditkarten-Limit
+ * ------------------------------------------------------------------ */
+
+.limitbar {
+  height: 4px; border-radius: 2px; background: var(--blue-soft);
+  overflow: hidden; margin-top: var(--sp-1);
+}
+.limitbar > i { display: block; height: 100%; background: var(--blue); border-radius: 2px; }
+.limitbar.over > i { background: var(--rot); }
+.limitbar.leer { opacity: 0.4; }
+.limit-note {
+  font-size: var(--text-xs); color: var(--ink-mute);
+  font-variant-numeric: tabular-nums; padding-bottom: var(--sp-1);
+}
+.limit-note.over { color: var(--rot); font-weight: 600; }
+
+/* ------------------------------------------------------------------ *
+ * Geldfluss
+ * ------------------------------------------------------------------ */
+
+.umschalter {
+  margin-left: auto; display: flex; gap: 2px;
+  border: 1px solid var(--line); border-radius: var(--r-sm); padding: 2px;
+}
+.umschalt-knopf {
+  border: none; background: none; color: var(--ink-mute);
+  border-radius: 6px; padding: 0.2rem 0.55rem;
+  font-size: var(--text-xs); font-weight: 600;
+}
+.umschalt-knopf:hover { color: var(--ink); }
+.umschalt-knopf.aktiv { background: var(--blue); color: #fff; }
+
+/* Die Bühne nimmt den Platz, den die Karte über ihren Inhalt hinaus hat.
+   `meet` hält dabei das Seitenverhältnis — gestreckt wird nichts. */
+.diagramm-buehne {
+  margin-top: var(--sp-2); flex: 1;
+  display: grid; place-items: center; min-height: 11rem;
+}
+.diagramm { display: block; width: 100%; height: 100%; }
+
+/* Führungslinie zu einer beiseitegerückten Beschriftung. */
+.fuehrung { stroke: var(--ink-mute); stroke-width: 0.7; fill: none; opacity: 0.5; }
+
+/* Flächen. Die Serienfarben tragen die Grösse, nicht die Identität —
+   jeder Knoten und jedes Segment ist zusätzlich beschriftet. */
+.f-stufe0 { fill: var(--serie-0); }
+.f-stufe1 { fill: var(--serie-1); }
+.f-stufe2 { fill: var(--serie-2); }
+.f-stufe3 { fill: var(--serie-3); }
+.f-rest { fill: var(--serie-rest); }
+.f-luecke { fill: var(--serie-luecke); }
+.f-einkommen, .f-bestand, .f-geliehen { fill: var(--serie-quelle); }
+.f-nabe { fill: var(--serie-nabe); }
+
+/* Bänder liegen hinter den Knoten und dürfen sie nicht überdecken. */
+.band { opacity: 0.55; }
+.knoten-flaeche, .segment, .legenden-punkt { opacity: 1; }
+
+/* 2px Fläche zwischen benachbarten Füllungen, damit sie nicht verschmelzen. */
+.segment { stroke: var(--card); stroke-width: 2; }
+
+.d-name {
+  font-family: var(--body); font-size: 10px; font-weight: 600;
+  fill: var(--ink); dominant-baseline: middle;
+}
+.d-wert {
+  font-family: var(--body); font-size: 9px;
+  fill: var(--ink-mute); dominant-baseline: middle;
+  font-variant-numeric: tabular-nums;
+}
+.d-mitte {
+  font-family: var(--display); font-size: 14px; font-weight: 700;
+  fill: var(--ink); dominant-baseline: middle; font-variant-numeric: tabular-nums;
+}
+.d-mitte-klein {
+  font-family: var(--body); font-size: 9px;
+  fill: var(--ink-mute); dominant-baseline: middle;
+}
+
+.d-tabelle-knopf {
+  border: none; background: none; color: var(--blue);
+  font-size: var(--text-xs); font-weight: 600;
+  padding: var(--sp-2) 0 0; text-align: left; align-self: start;
+}
+.d-tabelle-knopf:hover { text-decoration: underline; }
+.d-tabelle-huelle[hidden] { display: none; }
+.d-tabelle-huelle { overflow-x: auto; margin-top: var(--sp-2); }
+
+.d-tabelle { width: 100%; border-collapse: collapse; font-size: var(--text-xs); }
+.d-tabelle th, .d-tabelle td {
+  text-align: left; padding: 0.25rem 0.4rem; border-bottom: 1px solid var(--line);
+}
+.d-tabelle thead th { color: var(--ink-mute); font-weight: 600; }
+.d-tabelle .num { text-align: right; font-variant-numeric: tabular-nums; }
+.d-tabelle .d-gruppe th {
+  color: var(--ink-mute); text-transform: uppercase;
+  letter-spacing: 0.08em; font-size: 0.66rem; padding-top: var(--sp-2);
+}
+
+/* ------------------------------------------------------------------ *
+ * Analyse
+ * ------------------------------------------------------------------ */
+
+.analyse-spalten {
+  display: grid; gap: var(--sp-4) var(--sp-5);
+  grid-template-columns: repeat(auto-fit, minmax(var(--spalte-min), 1fr));
+  align-items: start;
+}
+
+.insights { display: grid; gap: var(--sp-2); align-content: start; }
+.insight {
+  display: flex; gap: var(--sp-3); align-items: stretch;
+  background: var(--ground); border-radius: var(--r-md);
+  padding: var(--sp-3); font-size: var(--text-sm);
+}
+.insight::before { content: ""; flex: none; width: 3px; border-radius: 2px; background: var(--blue); }
+.insight.warn::before { background: var(--rot); }
+.insight.good::before { background: var(--gruen); }
+.insight b { font-variant-numeric: tabular-nums; }
+
+.breakdown { display: grid; gap: var(--sp-2); align-content: start; }
+.brow { display: flex; align-items: center; gap: var(--sp-3); font-size: var(--text-sm); }
+.brow .bl {
+  flex: 0 1 10rem; min-width: 5rem; color: var(--ink-mute);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.brow .bar { flex: 1 1 3rem; height: 6px; border-radius: 3px; background: var(--blue-soft); overflow: hidden; }
+.brow .bar i { display: block; height: 100%; border-radius: 3px; }
+.brow .bv {
+  flex: none; width: var(--amount-w); text-align: right;
+  font-variant-numeric: tabular-nums; font-weight: 600;
+}
+
+.legend {
+  display: flex; gap: var(--sp-4); flex-wrap: wrap;
+  font-size: var(--text-xs); color: var(--ink-mute);
+  margin-top: var(--sp-3); padding-top: var(--sp-3); border-top: 1px solid var(--line);
+}
+.legend span { display: inline-flex; align-items: center; gap: var(--sp-1); }
+.legend i { width: 0.6rem; height: 0.6rem; border-radius: 999px; display: inline-block; }
+.legend .l-rot i { background: var(--rot); }
+.legend .l-gruen i { background: var(--gruen); }
+.legend .l-gelb i { background: var(--gelb); }
+
+/* ------------------------------------------------------------------ *
+ * Privatsicht
+ *
+ * Die Zahlen bleiben im Dokument und werden nur unscharf gezeichnet —
+ * so laesst sich weiterarbeiten, und Zeigen oder Verbergen kostet keinen
+ * Neuaufbau. Was gerade gebraucht wird, gibt der Zeiger oder der Fokus
+ * einzeln frei; der Rest bleibt verdeckt.
+ *
+ * Nicht verdeckt werden Bezeichnungen: ohne sie waere die Ansicht nicht
+ * mehr bedienbar. Wer auch die Namen verbergen will, schliesst das Fenster.
+ * ------------------------------------------------------------------ */
+
+/*
+ * `:where()` statt `:is()` ist hier keine Geschmacksfrage: `:is()` uebernimmt
+ * die Spezifitaet seines staerksten Arguments. Die Liste enthielt
+ * `section.card header .total`, wodurch die Verdeckungsregel spezifischer
+ * wurde als die Regeln, die einzelne Werte wieder freigeben — der Fokus
+ * hatte dann keine Wirkung mehr. `:where()` zaehlt null und laesst den
+ * Freigaben den Vortritt.
+ */
+:root[data-privat] :where(
+  input.amount,
+  section.card header .total,
+  .stat .value,
+  .stat .sub,
+  .limit-note,
+  .brow .bv,
+  .insight,
+  .diagramm
+) {
+  filter: blur(0.32rem);
+  transition: filter 0.1s ease;
+}
+
+/* Einzeln freigeben, ohne die Sicht als Ganzes aufzuheben. */
+:root[data-privat] input.amount:focus,
+:root[data-privat] input.amount:hover,
+:root[data-privat] .row:hover .total,
+:root[data-privat] .stat:hover .value,
+:root[data-privat] .stat:hover .sub,
+:root[data-privat] .brow:hover .bv,
+:root[data-privat] .insight:hover,
+:root[data-privat] .diagramm:hover,
+:root[data-privat] .limitrow:hover ~ .limit-note,
+:root[data-privat] section.card:hover > header .total {
+  filter: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root[data-privat] :where(input.amount, .stat .value, .insight, .diagramm) { transition: none; }
+}
+
+/* Der Schalter selbst zeigt an, dass etwas verdeckt ist. */
+:root[data-privat] #privat { border-color: var(--blue); color: var(--blue); }
+
+/* ------------------------------------------------------------------ *
+ * Einstellungen
+ * ------------------------------------------------------------------ */
+
+.einstellungen {
+  border: 1px solid var(--line); border-radius: var(--r-lg);
+  background: var(--card); color: var(--ink);
+  padding: 0; max-width: 34rem; width: calc(100vw - 2 * var(--sp-4));
+  max-height: calc(100vh - 2 * var(--sp-5));
+  box-shadow: 0 12px 32px rgb(0 0 0 / 0.18);
+}
+.einstellungen::backdrop { background: rgb(0 0 0 / 0.45); }
+
+.e-kopf {
+  display: flex; align-items: center; gap: var(--sp-3);
+  padding: var(--sp-4); border-bottom: 1px solid var(--line);
+  position: sticky; top: 0; background: var(--card); z-index: 1;
+}
+.e-kopf h2 { font-size: var(--text-lg); font-weight: 700; }
+.e-kopf .icon { margin-left: auto; font-size: var(--text-lg); }
+
+.e-koerper {
+  padding: var(--sp-4); display: grid; gap: var(--sp-5);
+  overflow-y: auto;
+}
+.e-block { display: grid; gap: var(--sp-2); }
+.e-block h3 {
+  font-family: var(--body);
+  font-size: var(--text-xs); text-transform: uppercase; letter-spacing: 0.08em;
+  font-weight: 600; color: var(--ink-mute);
+}
+.e-text { margin: 0; font-size: var(--text-xs); color: var(--ink-mute); }
+
+.e-wahl, .e-reihe { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
+.e-reihe > button { flex: 1 1 12rem; }
+
+.e-option {
+  display: inline-flex; align-items: center; gap: var(--sp-2);
+  border: 1px solid var(--line); background: var(--card); color: var(--ink);
+  border-radius: var(--r-sm); padding: 0.4rem 0.7rem;
+  font-size: var(--text-sm); font-weight: 600;
+}
+.e-option:hover { border-color: var(--blue); }
+.e-option.aktiv { border-color: var(--blue); background: var(--blue-soft); color: var(--blue-deep); }
+.e-punkt {
+  width: 0.85rem; height: 0.85rem; border-radius: 999px;
+  border: 1px solid rgb(0 0 0 / 0.15); flex: none;
+}
+
+.e-fuss {
+  margin: 0; font-size: var(--text-xs); color: var(--ink-mute);
+  overflow-wrap: anywhere; border-top: 1px solid var(--line); padding-top: var(--sp-3);
+}
+
+/* ------------------------------------------------------------------ *
+ * Zugangsbildschirme
+ * ------------------------------------------------------------------ */
+
+body.gated .topbar { display: none; }
+body.gated main { padding-top: var(--sp-6); }
+
+.gate {
+  max-width: 32rem; margin: 0 auto;
+  background: var(--card); border: 1px solid var(--line); border-radius: var(--r-lg);
+  padding: var(--sp-5); box-shadow: var(--schatten);
+}
+.gate h1 {
+  font-size: var(--text-xl); font-weight: 700;
+  letter-spacing: -0.01em; margin-bottom: var(--sp-3);
+}
+.gate-text {
+  font-size: var(--text-sm); color: var(--ink-mute);
+  margin: 0 0 var(--sp-3); max-width: 40em;
+}
+.gate-form { display: grid; gap: var(--sp-3); margin-top: var(--sp-4); }
+.gate-field { display: grid; gap: var(--sp-1); }
+.gate-field label {
+  font-size: var(--text-xs); text-transform: uppercase; letter-spacing: 0.09em;
+  font-weight: 600; color: var(--ink-mute);
+}
+.gate-field input {
+  border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--field);
+  padding: 0.55rem 0.65rem; color: var(--ink); font-size: var(--text-lg);
+  letter-spacing: 0.02em;
+}
+.gate-field input:focus { border-color: var(--blue); background: var(--card); }
+
+.gate-strength { font-size: var(--text-xs); margin: 0; color: var(--ink-mute); min-height: 1.2em; }
+.gate-strength.s-schwach { color: var(--rot); }
+.gate-strength.s-mittel { color: var(--gelb); }
+.gate-strength.s-stark { color: var(--gruen); }
+
+.gate-kaestchen {
+  display: flex; align-items: flex-start; gap: var(--sp-2);
+  font-size: var(--text-sm); color: var(--ink-mute); cursor: pointer;
+}
+.gate-kaestchen input { margin-top: 0.2rem; accent-color: var(--blue); }
+
+.gate-error { font-size: var(--text-sm); margin: 0; color: var(--rot); font-weight: 600; min-height: 1.2em; }
+
+.gate-submit { padding: 0.6rem 1rem; font-size: var(--text-md); }
+.gate-submit:disabled { opacity: 0.6; cursor: default; }
+
+/* ------------------------------------------------------------------ *
+ * Schmale Fenster: Zahlenfelder brauchen mehr Anteil an der Breite
+ * ------------------------------------------------------------------ */
+
+@media (max-width: 30rem) {
+  :root { --amount-w: 4.5rem; --spalte-min: 0; }
+  .save-zone { margin-left: 0; width: 100%; }
+  .btn-save { flex: 1; }
+  .month-nav { width: 100%; }
+  .month-nav select { flex: 1; min-width: 0; }
+  .brow .bl { flex-basis: 6.5rem; }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .limitbar > i, .brow .bar i { transition: width 0.35s ease; }
+}

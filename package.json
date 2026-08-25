@@ -1,0 +1,105 @@
+{
+  "name": "blaubuch",
+  "productName": "Blaubuch",
+  "version": "1.0.0",
+  "description": "Monatsbudget für den Schweizer Alltag — lokal, ohne Konto, ohne Cloud.",
+  "keywords": [
+    "budget",
+    "finanzen",
+    "schweiz",
+    "chf",
+    "electron",
+    "offline"
+  ],
+  "license": "MIT",
+  "author": "Jeffrey Jesu",
+  "main": "src/main/main.js",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "test": "node --test \"test/**/*.test.mjs\"",
+    "fonts": "node tools/copy-fonts.mjs",
+    "icon": "node tools/make-icon.mjs",
+    "assets": "npm run fonts && npm run icon && npm run icon:mac",
+    "dist": "npm run assets && electron-builder --win portable",
+    "dist:installer": "npm run assets && electron-builder --win nsis",
+    "pack": "npm run assets && electron-builder --dir",
+    "check:secrets": "node tools/check-secrets.mjs",
+    "verify": "npm run check:secrets && npm test",
+    "vorschau": "node tools/server.mjs",
+    "dist:mac": "npm run assets && electron-builder --mac",
+    "icon:mac": "node tools/make-icns.mjs"
+  },
+  "devDependencies": {
+    "@fontsource/instrument-sans": "^5.0.0",
+    "@fontsource/sora": "^5.0.0",
+    "electron": "^40.0.0",
+    "electron-builder": "^26.0.0"
+  },
+  "build": {
+    "appId": "ch.jjlabs.blaubuch",
+    "productName": "Blaubuch",
+    "copyright": "Copyright (c) 2026 Jeffrey Jesu",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "src/**/*",
+      "!**/*.map"
+    ],
+    "win": {
+      "target": [
+        "portable"
+      ],
+      "icon": "build/icon.ico",
+      "artifactName": "Blaubuch-${version}-portable.${ext}"
+    },
+    "portable": {
+      "artifactName": "Blaubuch-${version}-portable.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "artifactName": "Blaubuch-${version}-setup.${ext}"
+    },
+    "linux": {
+      "target": [
+        "AppImage"
+      ],
+      "icon": "build/icon.png",
+      "category": "Office"
+    },
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        }
+      ],
+      "category": "public.app-category.finance",
+      "icon": "build/icon.icns",
+      "artifactName": "Blaubuch-${version}-${arch}.${ext}",
+      "darkModeSupport": true,
+      "identity": null,
+      "hardenedRuntime": false,
+      "gatekeeperAssess": false
+    },
+    "dmg": {
+      "artifactName": "Blaubuch-${version}-${arch}.${ext}"
+    }
+  },
+  "allowScripts": {
+    "electron@40.10.6": true
+  }
+}

@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <title>Blaubuch — Layoutvorschau</title>
+  <link rel="stylesheet" href="../src/renderer/styles.css">
+</head>
+<body>
+<!--
+  Entwicklungsvorschau. Ersetzt den Hauptprozess durch eine Attrappe im
+  Arbeitsspeicher, damit sich das Layout im Browser ansehen und bei
+  verschiedenen Breiten prüfen lässt — ohne Electron, ohne Passwort,
+  ohne Datei auf der Platte.
+
+  Diese Datei wird nicht mit ausgeliefert (siehe "files" in package.json).
+  Aufruf: npm run vorschau
+-->
+
+<header class="topbar">
+  <div class="topbar-inner">
+    <span class="wordmark"><span class="dot" aria-hidden="true"></span>Blaubuch</span>
+    <nav class="month-nav" aria-label="Monat">
+      <button type="button" class="icon" id="undo" title="Rückgängig" aria-label="Rückgängig" disabled>↩</button>
+      <button type="button" class="icon" id="prev-month" title="Vorheriger Monat" aria-label="Vorheriger Monat">‹</button>
+      <select id="month-select" aria-label="Monat wählen"></select>
+      <button type="button" class="icon" id="next-month" title="Nächster Monat" aria-label="Nächster Monat">›</button>
+      <button type="button" class="btn-ghost" id="new-month">+ Monat</button>
+    </nav>
+    <div class="save-zone">
+      <button type="button" class="btn-save" id="save" disabled>Speichern</button>
+      <span class="save-state" id="save-state">Geladen</span>
+      <button type="button" class="icon" id="privat" title="Beträge verbergen">👁</button>
+      <button type="button" class="icon" id="thema" title="Darstellung wechseln">◐</button>
+      <button type="button" class="icon" id="einstellungen" title="Einstellungen" aria-label="Einstellungen">⚙</button>
+    </div>
+    <form class="newmonth-form" id="newmonth-form" hidden>
+      <label class="nm-label" for="newmonth-input">Neuer Monat</label>
+      <input type="month" id="newmonth-input">
+      <button type="submit" class="btn-primary">Anlegen</button>
+      <button type="button" class="btn-plain" id="newmonth-cancel">Abbrechen</button>
+    </form>
+  </div>
+</header>
+
+<main id="app"></main>
+<p id="live" class="sr-only" role="status" aria-live="polite"></p>
+
+<script type="module">
+  /* Beispieldaten — frei erfunden, nur zum Anschauen des Layouts. */
+  const demo = {
+    version: 4,
+    updatedAt: new Date().toISOString(),
+    currentMonth: "2026-08",
+    months: {
+      "2026-07": {
+        einnahmen: { netto: 5000, spesen: 120, konto: 240, bar: 60, fremdschulden: 0 },
+        dauerauftraege: [
+          { id: "a1", name: "Miete", betrag: 1450, tag: "rot" },
+          { id: "a2", name: "Sparplan Depot", betrag: 300, tag: "gruen" }
+        ],
+        fixkosten: [{ id: "b1", name: "Krankenkasse", betrag: 310, tag: "rot" }],
+        kreditkarten: [{ id: "c1", name: "Hauptkarte", betrag: 620, limit: 2000 }],
+        ausgaben: []
+      },
+      "2026-08": {
+        einnahmen: { netto: 5000, spesen: 85, konto: 410, bar: 40, fremdschulden: 500 },
+        dauerauftraege: [
+          { id: "a3", name: "Miete", betrag: 1450, tag: "rot" },
+          { id: "a4", name: "Sparplan Depot", betrag: 300, tag: "gruen" },
+          { id: "a5", name: "Säule 3a", betrag: 200, tag: "gelb" },
+          { id: "a6", name: "Parkplatz mit sehr langer Bezeichnung zum Testen", betrag: 110, tag: "rot" }
+        ],
+        fixkosten: [
+          { id: "b2", name: "Krankenkasse", betrag: 310, tag: "rot" },
+          { id: "b3", name: "Handyabo", betrag: 29.9, tag: "rot" }
+        ],
+        kreditkarten: [
+          { id: "c2", name: "Hauptkarte", betrag: 1840, limit: 2000 },
+          { id: "c3", name: "Reservekarte", betrag: 250, limit: 0 }
+        ],
+        ausgaben: [
+          { id: "d1", name: "Zahnarzt", betrag: 245.6, tag: "rot" },
+          { id: "d2", name: "Steuern Kanton", betrag: 1280, tag: "rot" }
+        ]
+      }
+    }
+  };
+
+  /* Mit ?leer in der Adresse zeigt die Vorschau eine frische Installation:
+     alle Listen leer, alle Beträge 0. So lässt sich prüfen, ob die Kacheln
+     auch ohne Daten gleich hoch und gefüllt aussehen. */
+  const leer = {
+    version: 4,
+    updatedAt: new Date().toISOString(),
+    currentMonth: "2026-08",
+    months: {
+      "2026-08": {
+        einnahmen: { netto: 0, spesen: 0, konto: 0, bar: 0, fremdschulden: 0 },
+        dauerauftraege: [], fixkosten: [], kreditkarten: [], ausgaben: []
+      }
+    }
+  };
+
+  const parameter = new URLSearchParams(location.search);
+  let gespeichert = JSON.stringify(parameter.has("leer") ? leer : demo);
+
+  window.blaubuch = {
+    vaultStatus: async () => ({ zustand: "verschluesselt", path: "(Vorschau)", fehlversuche: 0, rest: 10, loeschenNach: 10, warnenAbRest: 5 }),
+    unlock: async () => ({ ok: true, text: gespeichert }),
+    createVault: async () => ({ ok: true }),
+    encryptExisting: async () => ({ ok: true }),
+    changePassword: async () => ({ ok: true }),
+    lock: async () => ({ ok: true }),
+    resetAll: async () => { gespeichert = JSON.stringify(leer); return { ok: true }; },
+    write: async (t) => { gespeichert = t; return { ok: true, path: "(Vorschau)", savedAt: new Date().toISOString() }; },
+    exportTo: async () => ({ ok: false, canceled: true }),
+    importFrom: async () => ({ ok: false, canceled: true }),
+    decryptForeign: async () => ({ ok: false, code: "wrong_password" }),
+    reveal: async () => ({ ok: true }),
+    copy: async (t) => navigator.clipboard?.writeText(t).catch(() => {}),
+    info: async () => ({ version: "Vorschau", dataPath: "(kein Dateizugriff in der Vorschau)" }),
+    confirm: async () => window.confirm("Vorschau: fortfahren?"),
+    readyToClose: () => {},
+    onMenu: () => () => {}
+  };
+
+  await import("../src/renderer/app.mjs");
+
+  /* Der Sperrbildschirm baut sich wie im Programm auf; die Vorschau
+     beantwortet ihn selbst, damit man direkt auf das Layout schaut.
+     Mit ?gate=1 in der Adresse bleibt er stehen und lässt sich prüfen. */
+  if (!parameter.has("gate")) {
+    const durchlaufen = () => {
+      const form = document.querySelector(".gate-form");
+      if (!form) return setTimeout(durchlaufen, 30);
+      form.querySelectorAll('input[type="password"]').forEach((i) => { i.value = "vorschau"; });
+      form.requestSubmit();
+    };
+    durchlaufen();
+  }
+</script>
+</body>
+</html>

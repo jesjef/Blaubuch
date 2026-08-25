@@ -1,0 +1,96 @@
+# Baut Blaubuch für Windows und macOS.
+#
+# Warum überhaupt: ein .dmg lässt sich nur auf macOS erzeugen, ein
+# .exe-Installer sinnvoll nur auf Windows. Wer beides ausliefern will,
+# braucht beide Maschinen — hier übernimmt das GitHub.
+#
+# Bei jedem Push läuft die Prüfung. Ein Tag wie v1.0.0 erzeugt zusätzlich
+# die fertigen Dateien und hängt sie an einen Release-Entwurf.
+
+name: Bauen
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  pruefen:
+    name: Prüfen
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      # Electron wird zum Prüfen nicht gebraucht — der Rechenkern, der Tresor
+      # und die Ablage laufen auf blossem Node. Spart rund 200 MB Download.
+      - run: npm ci --ignore-scripts
+      - run: npm run check:secrets
+      - run: npm test
+
+  bauen:
+    name: Bauen (${{ matrix.name }})
+    needs: pruefen
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            name: Windows
+            befehl: npm run dist
+          - os: macos-latest
+            name: macOS
+            befehl: npm run dist:mac
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+      - run: ${{ matrix.befehl }}
+        env:
+          # Ohne Entwicklerzertifikat wird nicht signiert. electron-builder
+          # würde sonst versuchen, einen Schlüsselbund zu öffnen, den es hier
+          # nicht gibt, und mit einem irreführenden Fehler abbrechen.
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+
+      - name: Ergebnis sichern
+        uses: actions/upload-artifact@v4
+        with:
+          name: blaubuch-${{ matrix.name }}
+          path: |
+            dist/*.exe
+            dist/*.dmg
+            dist/*.zip
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: An den Release-Entwurf hängen
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          files: |
+            dist/*.exe
+            dist/*.dmg
+            dist/*.zip
+          body: |
+            Weder die Windows- noch die macOS-Fassung ist signiert.
+
+            **Windows** meldet beim ersten Start SmartScreen: *Weitere
+            Informationen → Trotzdem ausführen*.
+
+            **macOS** meldet, die App stamme von einem nicht verifizierten
+            Entwickler: einmal mit der rechten Maustaste auf die App →
+            *Öffnen* → *Öffnen*. Danach startet sie normal.
