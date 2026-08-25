@@ -45,10 +45,8 @@ jobs:
         include:
           - os: windows-latest
             name: Windows
-            befehl: npm run dist
           - os: macos-latest
             name: macOS
-            befehl: npm run dist:mac
 
     steps:
       - uses: actions/checkout@v4
@@ -58,14 +56,35 @@ jobs:
           cache: npm
 
       - run: npm ci
-      - run: ${{ matrix.befehl }}
+
+      # Bewusst in einzelne Schritte zerlegt: schlägt etwas fehl, sagt schon
+      # der Name des Schritts, wo — ohne dass man das Protokoll öffnen muss.
+      - name: Schriften und Symbole erzeugen
+        run: npm run assets
+
+      - name: Windows — portable .exe
+        if: matrix.os == 'windows-latest'
+        run: npx electron-builder --win portable --publish never
         env:
-          # Ohne Entwicklerzertifikat wird nicht signiert. electron-builder
-          # würde sonst versuchen, einen Schlüsselbund zu öffnen, den es hier
-          # nicht gibt, und mit einem irreführenden Fehler abbrechen.
           CSC_IDENTITY_AUTO_DISCOVERY: false
 
+      # Das .zip zuerst: es braucht nur das Packen. Scheitert danach das .dmg
+      # an den Werkzeugen des Systems, sind die .zip-Dateien trotzdem da.
+      - name: macOS — .zip (arm64 und x64)
+        if: matrix.os == 'macos-latest'
+        run: npx electron-builder --mac zip --publish never
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+
+      - name: macOS — .dmg (arm64 und x64)
+        if: matrix.os == 'macos-latest'
+        run: npx electron-builder --mac dmg --publish never
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+
+      # `always()`: auch ein Teilergebnis ist mehr wert als keines.
       - name: Ergebnis sichern
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: blaubuch-${{ matrix.name }}
@@ -73,7 +92,7 @@ jobs:
             dist/*.exe
             dist/*.dmg
             dist/*.zip
-          if-no-files-found: error
+          if-no-files-found: warn
           retention-days: 14
 
       - name: An den Release-Entwurf hängen

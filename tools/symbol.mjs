@@ -14,7 +14,13 @@ import zlib from "node:zlib";
 
 const BLAU = [0x1b, 0x33, 0xc0];
 const HELL = [0xf4, 0xf6, 0xfd];
-const AA = 4; /* Kantenglaettung durch Mehrfachabtastung */
+/**
+ * Kantenglaettung durch Mehrfachabtastung. Bei kleinen Symbolen zaehlt jede
+ * Stufe, bei grossen ist der Unterschied nicht mehr zu sehen — 1024 Punkt
+ * mit vierfacher Abtastung waeren 16 Millionen Proben und kosten spuerbar
+ * Zeit, ohne dass man es sieht.
+ */
+const abtastung = (groesse) => (groesse <= 256 ? 4 : 2);
 
 /** Abstandsfunktion eines abgerundeten Quadrats, negativ innerhalb. */
 function rundesQuadrat(x, y, halb, radius) {
@@ -30,6 +36,7 @@ const deckung = (abstand, weite) => Math.min(1, Math.max(0, 0.5 - abstand / weit
 
 /** Zeichnet das Symbol in einen RGBA-Puffer. */
 export function zeichne(groesse) {
+  const AA = abtastung(groesse);
   const px = Buffer.alloc(groesse * groesse * 4);
   const mitte = groesse / 2;
   const feldHalb = groesse * 0.46;
