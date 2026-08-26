@@ -195,3 +195,93 @@ test("Zurücksetzen auf Zuruf verlangt einen offenen Tresor", async (t) => {
   assert.equal((await store.wipeByUser()).ok, true);
   assert.equal(await liegtVor(dir, DATA_NAME), false);
 });
+
+/* ------------------------------------------------------------------ *
+ * Automatische Sperre
+ *
+ * Der Waechter haengt am Fenster, laesst sich aber ohne DOM pruefen: er
+ * braucht nur addEventListener, localStorage und setTimeout. Die Zeitgeber
+ * sind gestellt — sonst liefe der Test eine Viertelstunde.
+ * ------------------------------------------------------------------ */
+
+/** Minimales Fenster und ein Speicher, der nur im Arbeitsspeicher lebt. */
+function stelleFensterBereit(t, gespeichert = null) {
+  const handler = [];
+  const werte = new Map();
+  if (gespeichert !== null) werte.set("blaubuch-sperre", gespeichert);
+
+  globalThis.window = { addEventListener: (_art, fn) => handler.push(fn) };
+  globalThis.localStorage = {
+    getItem: (k) => (werte.has(k) ? werte.get(k) : null),
+    setItem: (k, v) => werte.set(k, String(v)),
+    removeItem: (k) => werte.delete(k)
+  };
+  t.after(() => { delete globalThis.window; delete globalThis.localStorage; });
+
+  /** Eine Eingabe des Anwenders nachstellen. */
+  return { eingabe: () => handler.forEach((fn) => fn()) };
+}
+
+const MINUTE = 60 * 1000;
+
+test("der Tresor sperrt sich nach der eingestellten Zeit ohne Eingabe", async (t) => {
+  stelleFensterBereit(t);
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const { starteWaechter } = await import("../src/renderer/sperre.mjs?fall=1");
+
+  let gesperrt = 0;
+  const waechter = starteWaechter(() => { gesperrt += 1; });
+
+  /* Vor dem Scharfstellen passiert nichts — am Torbildschirm gibt es
+     nichts zu sperren. */
+  t.mock.timers.tick(60 * MINUTE);
+  assert.equal(gesperrt, 0, "ohne offenen Tresor darf nichts geschehen");
+
+  waechter.an();
+  t.mock.timers.tick(14 * MINUTE);
+  assert.equal(gesperrt, 0, "vor Ablauf der Zeit bleibt der Tresor offen");
+  t.mock.timers.tick(2 * MINUTE);
+  assert.equal(gesperrt, 1, "nach 15 Minuten ohne Eingabe wird gesperrt");
+
+  /* Und nur einmal: das Sperren entschaerft den Waechter selbst. */
+  t.mock.timers.tick(60 * MINUTE);
+  assert.equal(gesperrt, 1);
+});
+
+test("jede Eingabe stellt die Uhr zurück", async (t) => {
+  const fenster = stelleFensterBereit(t);
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const { starteWaechter } = await import("../src/renderer/sperre.mjs?fall=2");
+
+  let gesperrt = 0;
+  starteWaechter(() => { gesperrt += 1; }).an();
+
+  for (let i = 0; i < 10; i++) {
+    t.mock.timers.tick(14 * MINUTE);
+    fenster.eingabe();
+  }
+  assert.equal(gesperrt, 0, "wer arbeitet, wird nicht ausgesperrt");
+
+  t.mock.timers.tick(16 * MINUTE);
+  assert.equal(gesperrt, 1, "nach der letzten Eingabe läuft die Zeit normal weiter");
+});
+
+test("auf „Aus“ gestellt sperrt nichts", async (t) => {
+  stelleFensterBereit(t, "aus");
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const { starteWaechter, leseSperre } = await import("../src/renderer/sperre.mjs?fall=3");
+
+  assert.equal(leseSperre(), "aus");
+  let gesperrt = 0;
+  starteWaechter(() => { gesperrt += 1; }).an();
+
+  t.mock.timers.tick(24 * 60 * MINUTE);
+  assert.equal(gesperrt, 0, "wer die Sperre abschaltet, bleibt offen");
+});
+
+test("ein unsinniger gespeicherter Wert fällt auf die Voreinstellung zurück", async (t) => {
+  stelleFensterBereit(t, "niemals");
+  const { leseSperre } = await import("../src/renderer/sperre.mjs?fall=4");
+  assert.equal(leseSperre(), "15",
+    "eine manipulierte Einstellung darf die Sperre nicht abschalten");
+});

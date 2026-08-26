@@ -110,6 +110,10 @@ gemeinsam. Ein anderer Ordner lässt sich über die Umgebungsvariable
 | `Strg` + `N` | Neuen Monat anlegen |
 | `Strg` + `L` | Tresor sperren |
 
+Ohne Eingabe sperrt sich Blaubuch von selbst — voreingestellt nach 15
+Minuten, unter *Einstellungen → Automatisch sperren* änderbar bis hin zu
+*Aus*. Vorher wird gespeichert.
+
 Der Schalter oben rechts wechselt zwischen **System**, **hell** und **dunkel**;
 das Zahnrad daneben öffnet die Einstellungen mit Farbwahl, Datei- und
 Tresoraktionen.

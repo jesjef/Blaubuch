@@ -9,6 +9,7 @@
  */
 
 import { FARBSCHEMATA, leseFarbe, setzeFarbe, leseThema, setzeThema } from "./thema.mjs";
+import { SPERR_ZEITEN, leseSperre, setzeSperre } from "./sperre.mjs";
 
 const el = (tag, cls, text) => {
   const n = document.createElement(tag);
@@ -160,6 +161,16 @@ export function baueEinstellungen(aktionen) {
     knopf("Daten einlesen …", () => { dialog.close(); aktionen.einlesen(); }),
     knopf("Datenordner öffnen", () => aktionen.ordner())
   ]));
+
+  koerper.append(wahlgruppe({
+    titel: "Automatisch sperren",
+    optionen: SPERR_ZEITEN,
+    aktuell: leseSperre(),
+    beiWahl: (k) => { setzeSperre(k); aktionen.beiSperrzeit?.(); }
+  }));
+  koerper.lastChild.append(el("p", "e-text",
+    "Nach dieser Zeit ohne Eingabe wird gespeichert und der Tresor geschlossen. "
+    + "Zum Weiterarbeiten ist dann wieder das Passwort nötig."));
 
   koerper.append(knopfgruppe("Tresor", "Für ein vergessenes Passwort gibt es keine Wiederherstellung.", [
     knopf("Passwort ändern …", () => { dialog.close(); aktionen.passwort(); }),

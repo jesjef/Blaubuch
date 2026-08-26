@@ -15,6 +15,7 @@ import { createSeedState } from "../shared/seed.mjs";
 import { openVault, changePassword, askForeignPassword } from "./lock.mjs";
 import { verbindeSchalter, verbindePrivatSchalter } from "./thema.mjs";
 import { baueEinstellungen } from "./einstellungen.mjs";
+import { starteWaechter } from "./sperre.mjs";
 import { zeichne, alsTabelle, ANSICHTEN } from "./diagramm.mjs";
 
 const AUTOSAVE_MS = 1200;
@@ -35,6 +36,10 @@ let saveTimer = null;
 let notice = null;               /* {text, kind} */
 let appInfo = null;              /* Version und Ablageort, einmal beim Start geholt */
 const undoStack = [];
+
+/* Sperrt nach Untaetigkeit. Wird erst scharf gestellt, wenn ein Tresor
+   offen ist — am Torbildschirm gibt es nichts zu sperren. */
+const sperrWaechter = starteWaechter(() => sperrenUndNeuOeffnen());
 const refs = {};
 
 const announce = (text) => { liveEl.textContent = text; };
@@ -697,7 +702,8 @@ const einstellungen = baueEinstellungen({
      nur der Schnellschalter in der Kopfleiste muss sein Zeichen nachziehen. */
   beiDarstellung: () => aktualisiereThemaKnopf?.(),
   datenLoeschen: () => eintraegeLoeschen(),
-  kontoZuruecksetzen: () => kontoZuruecksetzen()
+  kontoZuruecksetzen: () => kontoZuruecksetzen(),
+  beiSperrzeit: () => sperrWaechter.neuLesen()
 });
 
 /**
@@ -1022,6 +1028,7 @@ async function passwortAendern() {
 
 /** Schluessel vergessen und wieder nach dem Passwort fragen. */
 async function sperrenUndNeuOeffnen() {
+  sperrWaechter.aus();
   clearTimeout(saveTimer);
   if (dirty) await save();
   await window.blaubuch.lock();
@@ -1044,6 +1051,8 @@ async function boot() {
 
   const tor = await openVault(startText, appEl);
   document.body.classList.remove("gated");
+  /* Ab hier liegt Klartext im Fenster — jetzt zaehlt die Uhr. */
+  sperrWaechter.an();
 
   if (tor.text === null) {
     /* Frisch angelegt — der Tresor enthaelt bereits genau diesen Stand. */

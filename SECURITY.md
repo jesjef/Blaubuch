@@ -29,6 +29,7 @@ Passwort wird nirgends gespeichert.
 | Setzt die scrypt-Parameter herunter, um schneller zu raten | **Ja** | Der Kopf der Datei ist mitsigniert; abgesenkte Parameter machen sie unlesbar. |
 | Probiert Passwörter *im Programm* durch | **Teilweise** | Verzögerung ab dem 3. Fehlversuch, Löschung nach dem 10. |
 | Kopiert die Datei und probiert die Kopie offline durch | **Nein** | Nur das Passwort schützt. Deshalb: lange Wortfolge, kein kurzes Kunstwort. |
+| Setzt sich an den unbeaufsichtigten, offenen Rechner | **Teilweise** | Blaubuch sperrt sich nach einstellbarer Zeit ohne Eingabe von selbst — voreingestellt 15 Minuten. Wer sofort da ist, kommt trotzdem an die Zahlen. |
 | Führt Schadsoftware unter deinem Windows-Konto aus, während Blaubuch offen ist | **Nein** | Der Schlüssel liegt dann im Arbeitsspeicher. Kein lokales Programm kann das verhindern. |
 | Liest den Bildschirm mit oder protokolliert Tastatureingaben | **Nein** | Ausserhalb der Reichweite einer Anwendung. |
 
@@ -145,8 +146,13 @@ selbst aus dem Quelltext bauen. Die Windows-Fassung ist gar nicht signiert.
 - **Fenstergrösse** in `window.json` — enthält keine Finanzdaten.
 - **Fehlversuchszähler** in `versuche.json` — enthält keine Finanzdaten.
 - **Ansichtseinstellungen** im Browserspeicher des Fensters: die gewählte
-  Darstellung (hell/dunkel), das Farbschema und die zuletzt benutzte
-  Diagrammansicht. Es sind Schlüssel mit Werten wie `light`/`dark`,
+  Darstellung (hell/dunkel), das Farbschema, die zuletzt benutzte
+  Diagrammansicht und die Zeit bis zur automatischen Sperre. Letztere ist
+  eine Sicherheitseinstellung an einem unverschlüsselten Ort — bewusst:
+  sie muss gelten, bevor irgendetwas entschlüsselt ist, und wer sie dort
+  ändern kann, hat ohnehin Zugriff auf die Tresordatei selbst. Ein
+  unsinniger Wert fällt auf die Voreinstellung zurück, statt die Sperre
+  abzuschalten. Es sind Schlüssel mit Werten wie `light`/`dark`,
   `petrol` oder `sankey`/`kuchen` — keine Beträge, keine Namen. Sie liegen bewusst dort und nicht im Tresor: eine
   Ansichtseinstellung soll auch dann gelten, wenn der Tresor noch zu ist.
 
