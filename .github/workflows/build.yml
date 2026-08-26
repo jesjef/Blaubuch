@@ -68,8 +68,12 @@ jobs:
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: false
 
-      # Das .zip zuerst: es braucht nur das Packen. Scheitert danach das .dmg
-      # an den Werkzeugen des Systems, sind die .zip-Dateien trotzdem da.
+      # Bis 1.0.3 wurde zusaetzlich ein .zip gebaut — urspruenglich als
+      # Rueckversicherung, falls das .dmg an den Werkzeugen des Laeufers
+      # scheitert. Beide enthalten dieselbe App; das .zip ist eigentlich fuer
+      # automatische Aktualisierung gedacht, die Blaubuch nicht hat. Seit die
+      # Signatur sitzt, ist das .dmg zuverlaessig — das .zip verdoppelte nur
+      # die Last: 436 MB je Durchlauf statt 218.
       #
       # --arm64 --x64 muss ausgeschrieben werden. Ein Ziel auf der
       # Kommandozeile ersetzt die Zielliste aus package.json samt der dort
@@ -77,12 +81,6 @@ jobs:
       # für die Architektur des Läufers. macos-latest ist Apple Silicon —
       # v1.0.1 kam deshalb ohne Intel-Dateien heraus, obwohl jeder Schritt
       # als erfolgreich galt.
-      - name: macOS — .zip (arm64 und x64)
-        if: matrix.os == 'macos-latest'
-        run: npx electron-builder --mac zip --arm64 --x64 --publish never
-        env:
-          CSC_IDENTITY_AUTO_DISCOVERY: false
-
       - name: macOS — .dmg (arm64 und x64)
         if: matrix.os == 'macos-latest'
         run: npx electron-builder --mac dmg --arm64 --x64 --publish never
@@ -132,26 +130,31 @@ jobs:
           done
           test "$gefunden" -eq 2 || { echo "Erwartet: zwei Programmordner (arm64 und x64), gefunden: $gefunden"; exit 1; }
 
-      - name: macOS — vier Dateien erwartet
+      - name: macOS — zwei Dateien erwartet
         if: matrix.os == 'macos-latest'
         run: |
           set -e
-          ls -1 dist/*.dmg dist/*.zip
-          anzahl=$(ls -1 dist/*.dmg dist/*.zip | wc -l | tr -d ' ')
-          test "$anzahl" -eq 4 || { echo "Erwartet: 2 x .dmg und 2 x .zip, gefunden: $anzahl"; exit 1; }
+          ls -1 dist/*.dmg
+          anzahl=$(ls -1 dist/*.dmg | wc -l | tr -d ' ')
+          test "$anzahl" -eq 2 || { echo "Erwartet: 2 x .dmg (arm64 und x64), gefunden: $anzahl"; exit 1; }
 
-      # `always()`: auch ein Teilergebnis ist mehr wert als keines.
+      # Artefakte kosten Platz und nuetzen nur, wenn sie die einzige Kopie
+      # sind. Bei einem Tag haengen dieselben Dateien am Release — dort waeren
+      # sie reine Verdopplung. 13 Durchlaeufe hatten so 5 GiB belegt.
+      #
+      # Deshalb: bei einem Tag nur, wenn etwas schiefging (dann ist das
+      # Teilergebnis das Einzige, was man in der Hand hat). Sonst immer, aber
+      # nur fuenf Tage — laenger schaut ohnehin niemand hinein.
       - name: Ergebnis sichern
-        if: always()
+        if: ${{ always() && (failure() || !startsWith(github.ref, 'refs/tags/v')) }}
         uses: actions/upload-artifact@v4
         with:
           name: blaubuch-${{ matrix.name }}
           path: |
             dist/*.exe
             dist/*.dmg
-            dist/*.zip
           if-no-files-found: warn
-          retention-days: 14
+          retention-days: 5
 
       - name: An den Release-Entwurf hängen
         if: startsWith(github.ref, 'refs/tags/v')
@@ -161,7 +164,6 @@ jobs:
           files: |
             dist/*.exe
             dist/*.dmg
-            dist/*.zip
           body: |
             Keine der Fassungen trägt ein Entwicklerzertifikat. Beide
             Systeme warnen deshalb beim ersten Start.

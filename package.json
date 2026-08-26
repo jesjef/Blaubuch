@@ -28,7 +28,8 @@
     "verify": "npm run check:secrets && npm test",
     "vorschau": "node tools/server.mjs",
     "dist:mac": "npm run assets && electron-builder --mac",
-    "icon:mac": "node tools/make-icns.mjs"
+    "icon:mac": "node tools/make-icns.mjs",
+    "clean": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\""
   },
   "devDependencies": {
     "@fontsource/instrument-sans": "^5.0.0",
@@ -75,13 +76,6 @@
       "target": [
         {
           "target": "dmg",
-          "arch": [
-            "arm64",
-            "x64"
-          ]
-        },
-        {
-          "target": "zip",
           "arch": [
             "arm64",
             "x64"
