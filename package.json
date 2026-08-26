@@ -25,11 +25,12 @@
     "dist:installer": "npm run assets && electron-builder --win nsis",
     "pack": "npm run assets && electron-builder --dir",
     "check:secrets": "node tools/check-secrets.mjs",
-    "verify": "npm run check:secrets && npm test",
+    "verify": "npm run check:secrets && npm run check:farben && npm test",
     "vorschau": "node tools/server.mjs",
     "dist:mac": "npm run assets && electron-builder --mac",
     "icon:mac": "node tools/make-icns.mjs",
-    "clean": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\""
+    "clean": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\"",
+    "check:farben": "node tools/pruefe-farben.mjs"
   },
   "devDependencies": {
     "@fontsource/instrument-sans": "^5.0.0",
