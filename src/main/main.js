@@ -45,33 +45,53 @@ async function revealData() {
  * IPC — bewusst wenige, eng geschnittene Kanaele
  * ------------------------------------------------------------------ */
 
-ipcMain.handle("vault:status", () => store.status());
-ipcMain.handle("vault:unlock", (_ev, password) => store.unlock(String(password ?? "")));
-ipcMain.handle("vault:create", (_ev, { password, text }) => store.create(String(password ?? ""), String(text ?? "")));
-ipcMain.handle("vault:encrypt-existing", (_ev, password) => store.encryptExisting(String(password ?? "")));
-ipcMain.handle("vault:change-password", (_ev, { alt, neu, sicherungenLoeschen }) =>
+/**
+ * Nimmt nur Aufrufe aus dem eigenen Fenster entgegen.
+ *
+ * Heute gibt es kein zweites: keine Rahmen, keine eingebetteten Seiten,
+ * und die CSP verbietet ohnehin alles Fremde. Die Pruefung kostet nichts
+ * und haelt den Kanal auch dann eng, wenn spaeter jemand ein Fenster
+ * hinzufuegt, ohne an diese Datei zu denken.
+ */
+function nurEigenesFenster(handler) {
+  return (ev, ...rest) => {
+    if (!mainWindow || mainWindow.isDestroyed() || ev.sender !== mainWindow.webContents) {
+      return { ok: false, code: "fremder_absender", error: "Aufruf aus einem unbekannten Fenster." };
+    }
+    return handler(ev, ...rest);
+  };
+}
+const handle = (kanal, handler) => ipcMain.handle(kanal, nurEigenesFenster(handler));
+
+handle("vault:status", () => store.status());
+handle("vault:unlock", (_ev, password) => store.unlock(String(password ?? "")));
+handle("vault:create", (_ev, { password, text }) => store.create(String(password ?? ""), String(text ?? "")));
+handle("vault:encrypt-existing", (_ev, password) => store.encryptExisting(String(password ?? "")));
+handle("vault:change-password", (_ev, { alt, neu, sicherungenLoeschen }) =>
   store.changePassword(String(alt ?? ""), String(neu ?? ""), { sicherungenLoeschen: sicherungenLoeschen === true }));
-ipcMain.handle("vault:lock", () => { store.lock(); return { ok: true }; });
+handle("vault:lock", () => { store.lock(); return { ok: true }; });
 
 /**
  * Vollstaendiges Zuruecksetzen: Tresor, Sicherungen, Zaehler und
  * liegengebliebene Klartextreste werden ueberschrieben und entfernt.
  * Danach steht das Programm wie bei einer frischen Installation da.
  */
-ipcMain.handle("vault:reset", async () => {
+handle("vault:reset", async () => {
   try {
-    await store.wipe();
-    return { ok: true };
+    /* wipeByUser statt wipe: das vollstaendige Zuruecksetzen gehoert hinter
+       das Passwort. Die Loeschung nach zehn Fehlversuchen ist der andere,
+       bewusst gewaehlte Weg — sie laeuft in store.unlock. */
+    return await store.wipeByUser();
   } catch (err) {
     return { ok: false, error: err.message };
   }
 });
 
-ipcMain.handle("store:write", (_ev, text) => store.write(String(text ?? "")));
+handle("store:write", (_ev, text) => store.write(String(text ?? "")));
 
-ipcMain.handle("store:reveal", async () => { await revealData(); return { ok: true }; });
+handle("store:reveal", async () => { await revealData(); return { ok: true }; });
 
-ipcMain.handle("store:export", async (_ev, { text, klartext }) => {
+handle("store:export", async (_ev, { text, klartext }) => {
   const wann = new Date().toISOString().slice(0, 10);
   const vorschlag = klartext ? "blaubuch-klartext-" + wann + ".json" : "blaubuch-" + wann + ".json";
 
@@ -101,7 +121,7 @@ ipcMain.handle("store:export", async (_ev, { text, klartext }) => {
     : store.exportEncrypted(String(text ?? ""), filePath);
 });
 
-ipcMain.handle("store:import", async () => {
+handle("store:import", async () => {
   const { canceled, filePaths } = await dialog.showOpenDialog(mainWindow, {
     title: "Blaubuch-Daten einlesen",
     properties: ["openFile"],
@@ -111,15 +131,15 @@ ipcMain.handle("store:import", async () => {
   return store.readForImport(filePaths[0]);
 });
 
-ipcMain.handle("store:decrypt-foreign", (_ev, { text, password }) =>
+handle("store:decrypt-foreign", (_ev, { text, password }) =>
   store.decryptForeign(String(text ?? ""), String(password ?? "")));
 
-ipcMain.handle("clipboard:write", (_ev, text) => {
+handle("clipboard:write", (_ev, text) => {
   clipboard.writeText(String(text ?? ""));
   return { ok: true };
 });
 
-ipcMain.handle("app:info", () => ({
+handle("app:info", () => ({
   version: app.getVersion(),
   dataPath: store.datei,
   electron: process.versions.electron,
@@ -127,7 +147,7 @@ ipcMain.handle("app:info", () => ({
   node: process.versions.node
 }));
 
-ipcMain.handle("dialog:confirm", async (_ev, { title, message, detail, confirmLabel }) => {
+handle("dialog:confirm", async (_ev, { title, message, detail, confirmLabel }) => {
   const { response } = await dialog.showMessageBox(mainWindow, {
     type: "question",
     buttons: [confirmLabel || "Fortfahren", "Abbrechen"],
@@ -178,7 +198,11 @@ function erlaubeSchliessen() {
 function readWindowState() {
   try {
     const s = JSON.parse(fs.readFileSync(windowFile(), "utf8"));
-    if (Number.isFinite(s.width) && Number.isFinite(s.height)) return s;
+    /* Auch x und y pruefen: eine verkorkste Datei koennte das Fenster
+       sonst ausserhalb jedes Bildschirms aufziehen, und das Programm
+       waere von aussen nicht von „startet nicht" zu unterscheiden. */
+    const zahl = (v) => v === undefined || Number.isFinite(v);
+    if (Number.isFinite(s.width) && Number.isFinite(s.height) && zahl(s.x) && zahl(s.y)) return s;
   } catch { /* erster Start */ }
   return { width: 1180, height: 900 };
 }
@@ -237,17 +261,21 @@ function createWindow() {
     schliessTimer = setTimeout(erlaubeSchliessen, 2000);
   });
 
-  /* Die App ist rein lokal. Alles, was nach aussen fuehrt, oeffnet im
-     Systembrowser statt im Programmfenster. */
-  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    if (/^https?:/.test(url)) shell.openExternal(url);
-    return { action: "deny" };
-  });
+  /* Die App ist rein lokal und enthaelt keinen einzigen Verweis nach
+     aussen. Frueher wurden https-Adressen hier an den Systembrowser
+     weitergereicht — das war ein Weg an der CSP vorbei: sie verbietet dem
+     Fenster jede Netzwerkverbindung, ueber diesen Handler haette sich
+     trotzdem etwas hinausschicken lassen. Es gibt nichts zu oeffnen,
+     also wird nichts geoeffnet. */
+  mainWindow.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
   mainWindow.webContents.on("will-navigate", (event, url) => {
     if (url !== mainWindow.webContents.getURL()) event.preventDefault();
   });
   /* Kein Nachladen von aussen — die Oberflaeche bringt alles mit. */
   mainWindow.webContents.session.setPermissionRequestHandler((_wc, _perm, cb) => cb(false));
+  /* Nicht jede Berechtigung wird erfragt — manche werden nur geprueft.
+     Ohne diesen zweiten Handler gilt fuer die die Voreinstellung. */
+  mainWindow.webContents.session.setPermissionCheckHandler(() => false);
 
   /* Mit BLAUBUCH_DEBUG=1 landen Meldungen der Oberflaeche auf der Konsole.
      Hilfreich beim Entwickeln, im Normalbetrieb still. */

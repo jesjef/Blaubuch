@@ -14,6 +14,12 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+
+/* Die Vorschau braucht die Oberflaeche und ihre eigene Seite. Sonst nichts. */
+const ERLAUBT = [
+  path.join(root, "src"),
+  path.join(root, "tools", "vorschau.html")
+];
 const PORT = Number(process.env.PORT ?? 8123);
 
 const TYPEN = {
@@ -35,6 +41,17 @@ http.createServer(async (req, res) => {
   /* Nichts ausserhalb des Projektordners ausliefern. */
   if (!datei.startsWith(root + path.sep)) {
     res.writeHead(403).end("Ausserhalb des Projekts");
+    return;
+  }
+
+  /* Und innerhalb des Projekts nur, was die Vorschau wirklich braucht.
+     Vorher lag der ganze Ordner offen — auch .git und vor allem
+     .secretwords, also genau die Datei, von der SECURITY.md sagt, sie
+     duerfe niemals nach draussen. Nur auf 127.0.0.1 erreichbar, aber ein
+     Entwicklungswerkzeug soll keine Datei ausliefern, die es nicht
+     ausliefern muss. */
+  if (!ERLAUBT.some((prefix) => datei === prefix || datei.startsWith(prefix + path.sep))) {
+    res.writeHead(403).end("Für die Vorschau nicht freigegeben: " + relativ);
     return;
   }
 

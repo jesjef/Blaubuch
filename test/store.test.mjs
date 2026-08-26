@@ -489,7 +489,10 @@ test("auch das Einlesen fremder Dateien wird nach Fehlversuchen gebremst", async
   /* Ohne Bremse waere dieser Weg ein schnelles Orakel: eine Kopie einlesen
      und darin unbegrenzt Passwoerter durchprobieren. */
   for (let i = 0; i < 3; i++) await store.decryptForeign(fremd, "falsch");
-  assert.equal(store.fehlversuche, 3, "Fehlversuche werden auch hier gezaehlt");
+  assert.equal(store.fremdversuche, 3, "Fehlversuche an fremden Dateien werden eigens gezaehlt");
+  assert.equal(store.fehlversuche, 0,
+    "der Zaehler des eigenen Tresors bleibt unberuehrt — sonst brachte eine "
+    + "fremde Datei den laufenden Bestand der Loeschung naeher");
 
   const start = Date.now();
   await store.decryptForeign(fremd, "falsch");

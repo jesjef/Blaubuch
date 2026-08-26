@@ -41,6 +41,15 @@ Nach zehn falschen Passwörtern löscht Blaubuch den Tresor, alle Sicherungen
 im Unterordner `backups` und liegengebliebene Klartextdateien aus einer
 Umstellung.
 
+**Was dabei ausdrücklich nicht angefasst wird:** alles, was das Programm
+nicht selbst angelegt hat. Die Löschung geht eine benannte Liste durch —
+`blaubuch.json`, ein liegengebliebenes `blaubuch.json.tmp`,
+`versuche.json`, `blaubuch-unverschluesselt-*.json` und den Unterordner
+`backups`. Von Hand gesicherte Kopien bleiben stehen, auch wenn sie im
+selben Ordner liegen. Bis Fassung 1.0.2 stand hier ein Muster, das jede
+Datei namens `blaubuch*.json` erfasste — im Betrieb vom Stick traf das
+auch die eigenen Sicherungen des Anwenders. Ein Test hält das jetzt fest.
+
 **Was das leistet:** Es verhindert, dass jemand, der nur dieses Programm vor
 sich hat, in Ruhe herumprobiert.
 
@@ -53,7 +62,13 @@ kopieren können.
 
 **Wen es zuverlässig trifft:** dich, nach einem vergessenen Passwort. Und
 jeden, der Zugang zu deinem entsperrten Rechner hat und zehnmal etwas
-eintippt. Es ist ein Selbstzerstörungsknopf, den jeder drücken kann, der
+eintippt.
+
+**Was den Zähler nicht bewegt:** Fehlversuche beim Öffnen einer *fremden*
+Datei über *Daten einlesen …*. Sie werden eigens gezählt und ebenso
+gebremst, wirken aber nicht auf den eigenen Tresor. Sonst brächte eine alte
+Sicherung, deren Passwort man vergessen hat, den laufenden Bestand in
+Gefahr. Es ist ein Selbstzerstörungsknopf, den jeder drücken kann, der
 das Programm öffnen kann.
 
 **Deshalb:** Lege eine verschlüsselte Kopie an einem zweiten Ort ab
@@ -94,8 +109,12 @@ falsch lange Felder werden abgewiesen, statt sie zu verarbeiten.
 |---|---|
 | `contextIsolation: true`, `nodeIntegration: false`, `sandbox: true` | [`src/main/main.js`](src/main/main.js) |
 | Content-Security-Policy ohne `unsafe-inline`, ohne externe Quellen | [`src/renderer/index.html`](src/renderer/index.html) |
-| Navigation nach aussen blockiert, Links öffnen im Systembrowser | [`src/main/main.js`](src/main/main.js) |
-| Alle Berechtigungsanfragen werden abgelehnt | [`src/main/main.js`](src/main/main.js) |
+| Navigation nach aussen blockiert; auch das Öffnen im Systembrowser ist abgeschaltet | [`src/main/main.js`](src/main/main.js) |
+| Alle Berechtigungsanfragen und -prüfungen werden abgelehnt | [`src/main/main.js`](src/main/main.js) |
+| IPC nimmt nur Aufrufe aus dem eigenen Fenster entgegen | [`src/main/main.js`](src/main/main.js) |
+| Vollständiges Zurücksetzen verlangt einen offenen Tresor | [`src/main/store.js`](src/main/store.js) |
+| Obergrenze für den Speicherbedarf der Schlüsselableitung | [`src/shared/vault.mjs`](src/shared/vault.mjs) |
+| Obergrenze für die Grösse einer eingelesenen Datei | [`src/main/store.js`](src/main/store.js) |
 | Schriften liegen im Programm, nichts wird nachgeladen | [`src/renderer/fonts/`](src/renderer/) |
 | Die Oberfläche setzt nie `innerHTML` — alles über `textContent` | [`src/renderer/app.mjs`](src/renderer/app.mjs) |
 | Diagramme werden als SVG aus eigenen Zahlen gebaut, ohne Fremdbibliothek | [`src/shared/fluss.mjs`](src/shared/fluss.mjs) |

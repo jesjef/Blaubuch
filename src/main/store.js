@@ -22,6 +22,11 @@ const DATA_NAME = "blaubuch.json";
 const BACKUP_DIR = "backups";
 const VERSUCHE_NAME = "versuche.json";
 const BACKUP_KEEP = 20;
+
+/* Ein Tresor mit Jahrzehnten an Monaten bleibt weit unter einem Megabyte.
+   Die Grenze faengt vertippte Auswahlen ab und verhindert, dass eine
+   zugeschickte Riesendatei den Hauptprozess vollaufen laesst. */
+const MAX_EINLESEN = 64 * 1024 * 1024;
 const BACKUP_MIN_ABSTAND_MS = 60 * 60 * 1000;
 
 /* Nach Fehlversuchen wird gewartet — gegen stures Durchprobieren.
@@ -64,6 +69,13 @@ class Store {
     this.schluessel = null;   /* Buffer, nur im Speicher */
     this.params = null;       /* {kdf, salt} */
     this.fehlversuche = 0;
+
+    /* Bewusst getrennt vom Zaehler oben und bewusst nur fuer diese Sitzung:
+       was an einer FREMDEN Datei geschieht, darf den eigenen Tresor nicht
+       der Loeschung naeher bringen. Sonst genuegt eine alte Sicherung,
+       deren Passwort man vergessen hat, um den laufenden Bestand in Gefahr
+       zu bringen. Gebremst wird trotzdem. */
+    this.fremdversuche = 0;
   }
 
   get datei() { return path.join(this.verzeichnis(), DATA_NAME); }
@@ -119,13 +131,23 @@ class Store {
       } catch { /* schon weg */ }
     };
 
+    /* Nur was dem Programm gehoert. Frueher stand hier ein Muster, das
+       auf jede Datei namens blaubuch*.json passte — im Stick-Betrieb also
+       auch auf die von Hand gesicherten Kopien des Anwenders, genau die
+       Sicherung, zu der SECURITY.md ihm raet. Eine Loeschung darf nur
+       Dateien anfassen, die dieses Programm selbst angelegt hat. */
+    const eigen = (name) =>
+      name === DATA_NAME
+      || name === DATA_NAME + ".tmp"
+      || name === VERSUCHE_NAME
+      /* legt encryptExisting an: der alte Klartext, zur Seite gelegt */
+      || /^blaubuch-unverschluesselt-.*\.json$/i.test(name);
+
     let namen = [];
     try { namen = await fsp.readdir(dir); } catch { /* Ordner fehlt */ }
 
     for (const name of namen) {
-      if (name === DATA_NAME || name === VERSUCHE_NAME || /^blaubuch.*\.json$/i.test(name)) {
-        await ueberschreibenUndLoeschen(path.join(dir, name));
-      }
+      if (eigen(name)) await ueberschreibenUndLoeschen(path.join(dir, name));
     }
 
     try {
@@ -137,6 +159,23 @@ class Store {
 
     this.lock();
     this.fehlversuche = 0;
+  }
+
+  /**
+   * Zuruecksetzen auf ausdruecklichen Wunsch — im Unterschied zu wipe(),
+   * das auch die Loeschung nach zehn Fehlversuchen ausloest.
+   *
+   * Diese Fassung verlangt einen offenen Tresor. Ohne die Pruefung liesse
+   * sich der gesamte Bestand am Sperrbildschirm vernichten, ohne das
+   * Passwort zu kennen — ueber die Entwicklerwerkzeuge genuegte ein
+   * einziger Aufruf.
+   */
+  async wipeByUser() {
+    if (!this.entsperrt) {
+      return { ok: false, code: "locked", error: "Der Tresor ist verschlossen." };
+    }
+    await this.wipe();
+    return { ok: true };
   }
 
   /* ---------------------------------------------------------------- *
@@ -177,9 +216,9 @@ class Store {
    * Oeffnen und Anlegen
    * ---------------------------------------------------------------- */
 
-  async #warteNachFehlversuch() {
-    if (this.fehlversuche < SPERRE_AB) return;
-    const ms = Math.min(SPERRE_MAX_MS, SPERRE_STUFE_MS * (this.fehlversuche - SPERRE_AB + 1));
+  async #warte(anzahl) {
+    if (anzahl < SPERRE_AB) return;
+    const ms = Math.min(SPERRE_MAX_MS, SPERRE_STUFE_MS * (anzahl - SPERRE_AB + 1));
     await new Promise((r) => setTimeout(r, ms));
   }
 
@@ -189,7 +228,7 @@ class Store {
 
     /* Der gespeicherte Zaehler gilt — sonst genuegte ein Neustart. */
     this.fehlversuche = Math.max(this.fehlversuche, await this.#ladeVersuche());
-    await this.#warteNachFehlversuch();
+    await this.#warte(this.fehlversuche);
 
     let text;
     try {
@@ -425,6 +464,14 @@ class Store {
   async readForImport(quelle) {
     const v = await vault();
     try {
+      const { size } = await fsp.stat(quelle);
+      if (size > MAX_EINLESEN) {
+        return {
+          ok: false,
+          code: "too_large",
+          error: "Die Datei ist " + Math.round(size / (1024 * 1024)) + " MB gross — das ist keine Blaubuch-Datei."
+        };
+      }
       const text = await fsp.readFile(quelle, "utf8");
       return { ok: true, text, verschluesselt: v.isVault(text), path: quelle };
     } catch (err) {
@@ -443,16 +490,13 @@ class Store {
    */
   async decryptForeign(text, password) {
     const v = await vault();
-    this.fehlversuche = Math.max(this.fehlversuche, await this.#ladeVersuche());
-    await this.#warteNachFehlversuch();
+    await this.#warte(this.fremdversuche);
     try {
       const { plaintext } = await v.decrypt(text, password);
+      this.fremdversuche = 0;
       return { ok: true, text: plaintext };
     } catch (err) {
-      if (err.code === "wrong_password") {
-        this.fehlversuche += 1;
-        await this.#speichereVersuche(this.fehlversuche);
-      }
+      if (err.code === "wrong_password") this.fremdversuche += 1;
       return { ok: false, code: err.code ?? "unknown", error: err.message };
     }
   }

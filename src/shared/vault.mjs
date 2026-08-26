@@ -56,6 +56,21 @@ const KDF_GRENZEN = {
   keylen: { min: 32, max: 64 }
 };
 
+/**
+ * Obergrenze fuer den Arbeitsspeicher der Schluesselableitung.
+ *
+ * Die Einzelgrenzen oben reichen nicht: N und r sind fuer sich genommen
+ * plausibel, ihr Produkt bestimmt aber den Bedarf. scrypt belegt rund
+ * 128 * N * r Byte — bei N=1048576 und r=32 waeren das 4 GiB, und zwar im
+ * Hauptprozess. Eine zugeschickte Datei koennte damit das Programm oder
+ * die Maschine zum Erliegen bringen, ohne ein einziges Passwort zu kennen.
+ *
+ * 256 MiB lassen reichlich Luft nach oben — der Standard liegt bei 64 MiB —
+ * und sind fuer keinen Rechner ein Problem.
+ */
+const MAX_KDF_SPEICHER = 256 * 1024 * 1024;
+const kdfSpeicher = (kdf) => 128 * kdf.N * kdf.r;
+
 class VaultError extends Error {
   constructor(code, message) {
     super(message);
@@ -94,6 +109,14 @@ function pruefeKdf(kdf) {
   /* scrypt verlangt, dass N eine Zweierpotenz ist. */
   if ((kdf.N & (kdf.N - 1)) !== 0) {
     throw new VaultError("bad_params", "Der Parameter N muss eine Zweierpotenz sein.");
+  }
+  /* Erst hier, nach den Einzelwerten: es zaehlt das Produkt. */
+  const speicher = kdfSpeicher(kdf);
+  if (speicher > MAX_KDF_SPEICHER) {
+    throw new VaultError(
+      "bad_params",
+      "Die Datei verlangt " + Math.round(speicher / (1024 * 1024)) + " MB Arbeitsspeicher zum Öffnen — mehr als zulässig."
+    );
   }
   return kdf;
 }
