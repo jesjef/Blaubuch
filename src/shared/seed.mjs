@@ -8,7 +8,7 @@
  * Wer aus einer bestehenden Datei kommt, nimmt „Daten einlesen …“.
  */
 
-import { SCHEMA_VERSION, emptyMonth } from "./budget.mjs";
+import { SCHEMA_VERSION, emptyMonth, standardKlassen } from "./budget.mjs";
 
 /** Schluessel des laufenden Monats, z. B. "2026-08". */
 export function currentMonthKey(datum = new Date()) {
@@ -21,6 +21,9 @@ export function createSeedState(datum = new Date()) {
     version: SCHEMA_VERSION,
     updatedAt: new Date().toISOString(),
     currentMonth: key,
+    /* Die vier mitgelieferten Klassifizierungen gehoeren von Anfang an in
+       den Bestand — sonst stuenden sie erst nach dem ersten Einlesen drin. */
+    klassen: standardKlassen(),
     months: { [key]: emptyMonth() }
   };
 }

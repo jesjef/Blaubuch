@@ -33,6 +33,7 @@ jobs:
       # und die Ablage laufen auf blossem Node. Spart rund 200 MB Download.
       - run: npm ci --ignore-scripts
       - run: npm run check:secrets
+      - run: npm run check:farben
       - run: npm test
 
   bauen:

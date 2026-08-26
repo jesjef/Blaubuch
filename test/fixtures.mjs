@@ -6,7 +6,7 @@
  * das oeffentliche Repository und duerfen nichts verraten.
  */
 
-import { SCHEMA_VERSION, emptyMonth } from "../src/shared/budget.mjs";
+import { SCHEMA_VERSION, emptyMonth, standardKlassen } from "../src/shared/budget.mjs";
 
 let n = 0;
 const id = () => "t" + (++n);
@@ -25,20 +25,27 @@ const id = () => "t" + (++n);
  */
 export function beispielMonat() {
   const m = emptyMonth();
-  m.einnahmen = { netto: 5000, spesen: 200, konto: 300, bar: 100, fremdschulden: 0 };
+  /* Die Konten kommen aus emptyMonth() und heissen dort schon richtig —
+     hier werden nur die Betraege gesetzt. */
+  const betrag = (name, wert) => { m.konten.find((k) => k.name === name).betrag = wert; };
+  betrag("Nettolohn", 5000);
+  betrag("Spesen", 200);
+  betrag("Kontostand", 300);
+  betrag("Bargeld", 100);
+
   m.dauerauftraege = [
-    { id: id(), name: "Miete", betrag: 1500, tag: "rot" },
-    { id: id(), name: "Sparplan", betrag: 300, tag: "gruen" }
+    { id: id(), name: "Miete", betrag: 1500, klasse: "ausgaben" },
+    { id: id(), name: "Sparplan", betrag: 300, klasse: "investition" }
   ];
   m.fixkosten = [
-    { id: id(), name: "Krankenkasse", betrag: 200, tag: "rot" },
-    { id: id(), name: "Handyabo", betrag: 50, tag: "rot" }
+    { id: id(), name: "Krankenkasse", betrag: 200, klasse: "ausgaben" },
+    { id: id(), name: "Handyabo", betrag: 50, klasse: "ausgaben" }
   ];
   m.kreditkarten = [
     { id: id(), name: "Hauptkarte", betrag: 400, limit: 0 },
     { id: id(), name: "Zweitkarte", betrag: 100, limit: 0 }
   ];
-  m.ausgaben = [{ id: id(), name: "Zahnarzt", betrag: 250, tag: "rot" }];
+  m.ausgaben = [{ id: id(), name: "Zahnarzt", betrag: 250, klasse: "ausgaben" }];
   return m;
 }
 
@@ -51,6 +58,19 @@ export function beispielState() {
     version: SCHEMA_VERSION,
     updatedAt: "2026-08-01T00:00:00.000Z",
     currentMonth: "2026-08",
+    klassen: standardKlassen(),
     months: { "2026-07": juli, "2026-08": beispielMonat() }
   };
+}
+
+/**
+ * Betrag eines Kontos lesen oder setzen — Bequemlichkeit fuer die Tests.
+ * Seit Fassung 5 sind Einnahmen eine Liste; ohne diesen Helfer stuende in
+ * jedem Test dieselbe Suche nach dem Namen.
+ */
+export function kontoBetrag(monat, name, wert) {
+  const k = (monat.konten ?? []).find((x) => x.name === name);
+  if (!k) return undefined;
+  if (wert !== undefined) k.betrag = wert;
+  return k.betrag;
 }

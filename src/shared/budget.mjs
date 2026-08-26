@@ -6,15 +6,49 @@
  * von den Tests unveraendert benutzt.
  */
 
-export const SCHEMA_VERSION = 4;
+import {
+  STANDARD_KLASSE, TAG_ZU_KLASSE,
+  leseKlassen, standardKlassen, klasseVon
+} from "./klassen.mjs";
 
-export const TAGS = ["rot", "gruen", "gelb"];
+export {
+  KLASSEN_FARBEN, FARB_KEYS, farbe, STANDARD_KLASSEN, STANDARD_KLASSE,
+  standardKlassen, klasseVon
+} from "./klassen.mjs";
 
-export const TAG_TITLE = {
-  rot: "Konsum",
-  gruen: "Investition (Kontrolle durch mich)",
-  gelb: "Investition (blockiert)"
+export const SCHEMA_VERSION = 5;
+
+/**
+ * Die Arten eines Kontos. Nicht frei erfindbar, weil sie die Rechnung
+ * bestimmen und nicht die Beschriftung:
+ *
+ *   erwerb    — was der Monat verdient hat. Nur das zaehlt fuer die Sparquote.
+ *   bestand   — was schon da war. Erhoeht die Mittel, ist kein Einkommen.
+ *   geliehen  — Fremdschulden. Wie Bestand, aber zurueckzuzahlen.
+ */
+export const KONTO_ARTEN = ["erwerb", "bestand", "geliehen"];
+
+export const KONTO_ART_TITLE = {
+  erwerb: "Erwerbseinkommen",
+  bestand: "Bestand",
+  geliehen: "Geliehen"
 };
+
+/**
+ * Die Konten, die eine frische Installation mitbringt — und zugleich die
+ * Umschluesselung der fuenf festen Felder aus Fassung 4 und aelter.
+ * Reihenfolge und Namen sind dieselben, damit nichts fremd wirkt.
+ */
+const KONTO_VORLAGE = [
+  ["netto", "Nettolohn", "erwerb"],
+  ["spesen", "Spesen", "erwerb"],
+  ["konto", "Kontostand", "bestand"],
+  ["bar", "Bargeld", "bestand"],
+  ["fremdschulden", "Geliehen", "geliehen"]
+];
+
+export const standardKonten = () =>
+  KONTO_VORLAGE.map(([, name, art]) => ({ id: uid(), name, betrag: 0, art, aktiv: true }));
 
 export const MONTH_NAMES = [
   "Januar", "Februar", "März", "April", "Mai", "Juni",
@@ -79,21 +113,36 @@ export const sortedMonths = (state) => Object.keys(state.months).sort();
 /**
  * Summen eines Monats.
  *
- * Bewusst getrennt:
- *   erwerb    — was der Monat tatsaechlich verdient hat (Netto + Spesen)
- *   bestand   — was schon da war (Konto + Bar), kein Einkommen
+ * Bewusst getrennt, und die Trennung kommt aus der `art` der Konten:
+ *   erwerb    — was der Monat tatsaechlich verdient hat
+ *   bestand   — was schon da war, kein Einkommen
  *   geliehen  — Fremdschulden, kein Einkommen und spaeter zurueckzuzahlen
  *   einnahmen — alle verfuegbaren Mittel zusammen
  *
  * Die Sparquote rechnet gegen `erwerb`, nicht gegen `einnahmen`: sonst
  * verbessert ein hoher Kontostand oder ein Darlehen die Quote, ohne dass
  * ein Franken mehr verdient wurde.
+ *
+ * `verloren` ist die zweite Zahl, die dieses Programm ausmacht: nicht wie
+ * viel weg ist, sondern wie viel davon tatsaechlich verloren ist. Sie kommt
+ * aus dem Feld `verloren` der Klassifizierungen — nicht aus ihrer Farbe.
+ *
+ * Die Klassen kommen aus dem Stammsatz. Ohne Angabe gelten die vier
+ * mitgelieferten, damit sich ein einzelner Monat auch fuer sich rechnen
+ * laesst.
  */
-export function totals(month) {
-  const e = month.einnahmen ?? {};
-  const erwerb = toRappen(parseAmount(e.netto) + parseAmount(e.spesen));
-  const bestand = toRappen(parseAmount(e.konto) + parseAmount(e.bar));
-  const geliehen = parseAmount(e.fremdschulden);
+export function totals(month, klassen = standardKlassen()) {
+  /* Ein deaktiviertes Konto bleibt sichtbar, zaehlt aber nicht mit. Das ist
+     etwas anderes als ein Betrag von 0: der Betrag bleibt erhalten, man
+     kann den Monat ohne diese Quelle durchspielen und sie zurueckholen. */
+  const konten = (month.konten ?? []).filter((k) => k && k.aktiv !== false);
+  const summeArt = (art) => toRappen(
+    konten.filter((k) => k.art === art).reduce((s, k) => s + parseAmount(k.betrag), 0)
+  );
+
+  const erwerb = summeArt("erwerb");
+  const bestand = summeArt("bestand");
+  const geliehen = summeArt("geliehen");
   const einnahmen = toRappen(erwerb + bestand + geliehen);
 
   const sum = (list) => toRappen((list ?? []).reduce((s, x) => s + parseAmount(x.betrag), 0));
@@ -103,17 +152,28 @@ export function totals(month) {
   const kk = sum(month.kreditkarten);
   const kosten = toRappen(da + fix + kk + re);
 
-  /* Kreditkartensaldo zaehlt als Konsum — er traegt kein eigenes Etikett. */
-  const byTag = { rot: kk, gruen: 0, gelb: 0 };
+  /* Kreditkartensaldo zaehlt als Ausgabe — er traegt kein eigenes Etikett. */
+  const byKlasse = {};
+  for (const k of klassen) byKlasse[k.id] = 0;
+  const standard = klasseVon(klassen, STANDARD_KLASSE);
+  byKlasse[standard.id] = kk;
+
   for (const x of [...(month.dauerauftraege ?? []), ...(month.fixkosten ?? []), ...(month.ausgaben ?? [])]) {
-    const tag = TAGS.includes(x.tag) ? x.tag : "rot";
-    byTag[tag] = toRappen(byTag[tag] + parseAmount(x.betrag));
+    const k = klasseVon(klassen, x.klasse);
+    byKlasse[k.id] = toRappen((byKlasse[k.id] ?? 0) + parseAmount(x.betrag));
   }
+
+  const verloren = toRappen(
+    klassen.filter((k) => k.verloren).reduce((s, k) => s + (byKlasse[k.id] ?? 0), 0)
+  );
 
   const rest = toRappen(einnahmen - kosten);
   return {
     erwerb, bestand, geliehen, einnahmen,
-    da, fix, kk, re, kosten, rest, byTag,
+    da, fix, kk, re, kosten, rest,
+    byKlasse, verloren,
+    /* Was ausgegeben, aber nicht verloren ist: angelegt oder gespart. */
+    angelegt: toRappen(kosten - verloren),
     sparquote: erwerb > 0 ? (rest / erwerb) * 100 : null
   };
 }
@@ -125,7 +185,8 @@ export function totals(month) {
  */
 export function buildInsights(state, monthKey) {
   const month = state.months[monthKey];
-  const t = totals(month);
+  const klassen = state.klassen ?? standardKlassen();
+  const t = totals(month, klassen);
   const out = [];
 
   if (t.sparquote !== null) {
@@ -181,13 +242,17 @@ export function buildInsights(state, monthKey) {
     });
   }
 
-  const invest = toRappen(t.byTag.gruen + t.byTag.gelb);
-  if (invest > 0) {
+  if (t.angelegt > 0) {
+    /* Aufgeschluesselt nach Klasse, damit man sieht, wohin es gegangen ist —
+       aber nur die, die in diesem Monat ueberhaupt vorkommen. */
+    const teile = klassen
+      .filter((k) => !k.verloren && (t.byKlasse[k.id] ?? 0) > 0)
+      .map((k) => formatCHF(t.byKlasse[k.id]) + " " + k.name);
     out.push({
       kind: "good",
       parts: [
-        "Investitionen: ", { b: formatCHF(invest) },
-        " (" + formatCHF(t.byTag.gruen) + " kontrolliert, " + formatCHF(t.byTag.gelb) + " blockiert) — kein verlorenes Geld."
+        "Nicht verloren: ", { b: formatCHF(t.angelegt) },
+        teile.length > 0 ? " (" + teile.join(", ") + ") — dieses Geld liegt woanders, es ist nicht weg." : "."
       ]
     });
   }
@@ -195,7 +260,7 @@ export function buildInsights(state, monthKey) {
   const keys = sortedMonths(state);
   const idx = keys.indexOf(monthKey);
   if (idx > 0) {
-    const pt = totals(state.months[keys[idx - 1]]);
+    const pt = totals(state.months[keys[idx - 1]], klassen);
     const dRest = toRappen(t.rest - pt.rest);
     const dKosten = toRappen(t.kosten - pt.kosten);
     out.push({
@@ -217,22 +282,27 @@ export function buildInsights(state, monthKey) {
 /** Monatsbericht als Fliesstext, gedacht zum Einfuegen in einen Chat. */
 export function buildReport(state, monthKey) {
   const month = state.months[monthKey];
-  const t = totals(month);
+  const klassen = state.klassen ?? standardKlassen();
+  const t = totals(month, klassen);
   const L = [];
 
   L.push("Analysiere meine Monatsbuchhaltung " + monthLabel(monthKey) + " (CHF) und gib mir konkrete Spar- und Optimierungstipps:");
   L.push("");
+  const ART_ZUSATZ = {
+    erwerb: "",
+    bestand: " (Bestand, kein Einkommen)",
+    geliehen: " (geliehen, rückzahlbar)"
+  };
   L.push("VERFÜGBARE MITTEL gesamt " + formatCHF(t.einnahmen) + ":");
-  L.push("- Netto Gehalt: " + formatCHF(parseAmount(month.einnahmen.netto)));
-  L.push("- Spesen: " + formatCHF(parseAmount(month.einnahmen.spesen)));
+  for (const k of month.konten ?? []) {
+    L.push("- " + k.name + (ART_ZUSATZ[k.art] ?? "") + ": " + formatCHF(parseAmount(k.betrag))
+      + (k.aktiv === false ? " [zählt diesen Monat nicht mit]" : ""));
+  }
   L.push("  → Erwerbseinkommen des Monats: " + formatCHF(t.erwerb));
-  L.push("- Konto aktuell (Bestand, kein Einkommen): " + formatCHF(parseAmount(month.einnahmen.konto)));
-  L.push("- Bar (Bestand, kein Einkommen): " + formatCHF(parseAmount(month.einnahmen.bar)));
-  L.push("- Fremdschulden (geliehen, rückzahlbar): " + formatCHF(t.geliehen));
   L.push("");
   L.push("DAUERAUFTRÄGE gesamt " + formatCHF(t.da) + ":");
   for (const x of month.dauerauftraege) {
-    if (parseAmount(x.betrag)) L.push("- " + x.name + ": " + formatCHF(parseAmount(x.betrag)) + " [" + (TAG_TITLE[x.tag] ?? TAG_TITLE.rot) + "]");
+    if (parseAmount(x.betrag)) L.push("- " + x.name + ": " + formatCHF(parseAmount(x.betrag)) + " [" + klasseVon(klassen, x.klasse).name + "]");
   }
   L.push("");
   L.push("FIXKOSTEN gesamt " + formatCHF(t.fix) + ":");
@@ -253,7 +323,10 @@ export function buildReport(state, monthKey) {
   L.push("GESAMTKOSTEN: " + formatCHF(t.kosten));
   L.push("RESTWERT: " + formatCHF(t.rest));
   L.push("Sparquote auf Erwerbseinkommen: " + (t.sparquote === null ? "—" : t.sparquote.toFixed(1) + "%"));
-  L.push("Investitionen kontrolliert: " + formatCHF(t.byTag.gruen) + " / blockiert: " + formatCHF(t.byTag.gelb));
+  L.push("Davon nicht verloren (angelegt oder gespart): " + formatCHF(t.angelegt));
+  for (const k of klassen) {
+    if (!k.verloren && (t.byKlasse[k.id] ?? 0) > 0) L.push("- " + k.name + ": " + formatCHF(t.byKlasse[k.id]));
+  }
   return L.join("\n");
 }
 
@@ -265,11 +338,12 @@ export function uid() {
 
 export function emptyMonth() {
   return {
-    einnahmen: { netto: 0, spesen: 0, konto: 0, bar: 0, fremdschulden: 0 },
+    konten: standardKonten(),
     dauerauftraege: [],
     fixkosten: [],
     kreditkarten: [],
-    ausgaben: []
+    ausgaben: [],
+    umbuchungen: []
   };
 }
 
@@ -281,13 +355,17 @@ export function emptyMonth() {
 export function monthFromPrevious(prev) {
   if (!prev) return emptyMonth();
   const copyList = (list) => (list ?? []).map((x) => ({
-    id: uid(), name: x.name, betrag: parseAmount(x.betrag), tag: TAGS.includes(x.tag) ? x.tag : "rot"
+    id: uid(), name: x.name, betrag: parseAmount(x.betrag),
+    klasse: typeof x.klasse === "string" && x.klasse ? x.klasse : STANDARD_KLASSE
   }));
   return {
-    einnahmen: {
-      netto: parseAmount(prev.einnahmen?.netto),
-      spesen: 0, konto: 0, bar: 0, fremdschulden: 0
-    },
+    /* Einkommen wiederholt sich Monat fuer Monat und bleibt stehen. Ein
+       Bestand oder ein Darlehen ist eine Momentaufnahme — der faengt bei 0
+       an, sonst schleppt man den Kontostand vom Vormonat mit. */
+    konten: (prev.konten ?? standardKonten()).map((k) => ({
+      id: uid(), name: k.name, art: k.art, aktiv: k.aktiv !== false,
+      betrag: k.art === "erwerb" ? parseAmount(k.betrag) : 0
+    })),
     dauerauftraege: copyList(prev.dauerauftraege),
     fixkosten: copyList(prev.fixkosten),
     /* Karten bleiben bestehen, der Saldo faengt bei 0 an — das Limit
@@ -295,7 +373,9 @@ export function monthFromPrevious(prev) {
     kreditkarten: (prev.kreditkarten ?? []).map((k) => ({
       id: uid(), name: k.name, betrag: 0, limit: parseAmount(k.limit)
     })),
-    ausgaben: []
+    ausgaben: [],
+    /* Umbuchungen sind Ereignisse eines Monats, keine Dauerposten. */
+    umbuchungen: []
   };
 }
 
@@ -344,27 +424,95 @@ function leseKarten(roh, altLimits, monatsKey, repariert) {
  * Bringt beliebige gespeicherte Daten in die aktuelle Form.
  * Wirft nie — eine defekte Datei darf die App nicht am Start hindern.
  * Gibt {state, repariert} zurueck, damit die Oberflaeche es melden kann.
+ *
+ * Zwei Umstellungen aus Fassung 4 und aelter veraendern Bedeutung und
+ * werden deshalb gemeldet statt still gemacht:
+ *
+ *  - Die fuenf festen Einnahmefelder werden zu benannten Konten.
+ *  - Was „gelb“ war, bedeutete „Investition gebunden“. Heute ist Gelb die
+ *    Farbe von Sparen, und die alte Bedeutung heisst „Investition
+ *    blockiert“ und ist lila. Ohne Umschluesselung bedeuteten alte Zahlen
+ *    rueckwirkend etwas anderes, als der Benutzer eingetragen hat.
  */
 export function migrate(raw) {
   const repariert = [];
+  const klassen = leseKlassen(raw?.klassen);
+  const kennungen = new Set(klassen.map((k) => k.id));
+
   const state = {
     version: SCHEMA_VERSION,
     updatedAt: typeof raw?.updatedAt === "string" ? raw.updatedAt : new Date().toISOString(),
     currentMonth: null,
+    klassen,
     months: {}
   };
 
-  /* Bis Fassung 3 gab es zwei fest benannte Karten und ihre Limits im
-     Stammsatz. Beim Einlesen werden daraus gewoehnliche Kartenzeilen. */
-  const altLimits = (raw && typeof raw.limits === "object" && raw.limits) || {};
+  let ausGelb = 0;
+  let konvertiert = 0;
 
+  /** Fassung 5 nennt die Klasse, aeltere tragen eine Markierung. */
+  const leseKlasse = (x) => {
+    if (typeof x.klasse === "string" && kennungen.has(x.klasse)) return x.klasse;
+    const ziel = typeof x.tag === "string" ? TAG_ZU_KLASSE[x.tag] : undefined;
+    if (ziel && kennungen.has(ziel)) {
+      if (x.tag === "gelb") ausGelb += 1;
+      return ziel;
+    }
+    /* Im Zweifel gilt Geld als ausgegeben und nicht als angelegt — das ist
+       die vorsichtigere der beiden Annahmen. */
+    return STANDARD_KLASSE;
+  };
+
+  /** Fassung 5 hat eine Kontenliste, aeltere fuenf feste Felder. */
+  const leseKonten = (m) => {
+    if (Array.isArray(m?.konten)) {
+      return m.konten
+        .filter((k) => k && typeof k.name === "string" && k.name.trim())
+        .map((k) => ({
+          id: typeof k.id === "string" && k.id ? k.id : uid(),
+          name: k.name.trim(),
+          betrag: parseAmount(k.betrag),
+          art: KONTO_ARTEN.includes(k.art) ? k.art : "bestand",
+          aktiv: k.aktiv !== false
+        }));
+    }
+    konvertiert += 1;
+    const e = (m && typeof m.einnahmen === "object" && m.einnahmen) || {};
+    /* Alle fuenf wandern mit, auch die mit 0: sonst verschwindet nach dem
+       Einlesen eine Zeile, die der Benutzer kennt. */
+    return KONTO_VORLAGE.map(([feld, name, art]) => ({
+      id: uid(), name, betrag: parseAmount(e[feld]), art, aktiv: true
+    }));
+  };
+
+  /** Nur was auf zwei verschiedene, vorhandene Konten zeigt, ueberlebt. */
+  const leseUmbuchungen = (roh, konten) => {
+    if (!Array.isArray(roh)) return [];
+    const vorhanden = new Set(konten.map((k) => k.id));
+    return roh
+      .filter((u) => u && vorhanden.has(u.von) && vorhanden.has(u.nach) && u.von !== u.nach)
+      .map((u) => ({
+        id: typeof u.id === "string" && u.id ? u.id : uid(),
+        von: u.von,
+        nach: u.nach,
+        betrag: parseAmount(u.betrag),
+        notiz: typeof u.notiz === "string" ? u.notiz : ""
+      }));
+  };
+
+  /* Bis Fassung 3 lagen die Kartenlimits im Stammsatz. */
+  const altLimits = (raw && typeof raw.limits === "object" && raw.limits) || {};
   const rawMonths = (raw && typeof raw.months === "object" && raw.months) || {};
+
   for (const [key, m] of Object.entries(rawMonths)) {
-    if (!isMonthKey(key)) { repariert.push("Monat „" + key + "“ hat keinen gültigen Schlüssel und wurde ausgelassen."); continue; }
+    if (!isMonthKey(key)) {
+      repariert.push("Monat „" + key + "“ hat keinen gültigen Schlüssel und wurde ausgelassen.");
+      continue;
+    }
     const base = emptyMonth();
-    const e = m?.einnahmen ?? {};
-    for (const f of Object.keys(base.einnahmen)) base.einnahmen[f] = parseAmount(e[f]);
+    base.konten = leseKonten(m);
     base.kreditkarten = leseKarten(m?.kreditkarten, altLimits, key, repariert);
+
     for (const listName of ["dauerauftraege", "fixkosten", "ausgaben"]) {
       /* Bis Fassung 4 hiess "ausgaben" noch "rechnungen". Alte Dateien
          dürfen dadurch nicht ihre Einträge verlieren. */
@@ -376,13 +524,29 @@ export function migrate(raw) {
           id: typeof x.id === "string" && x.id ? x.id : uid(),
           name: x.name.trim(),
           betrag: parseAmount(x.betrag),
-          tag: TAGS.includes(x.tag) ? x.tag : "rot"
+          klasse: leseKlasse(x)
         }));
       if (base[listName].length !== list.length) {
         repariert.push("In " + monthLabel(key) + " wurden " + (list.length - base[listName].length) + " unvollständige Zeilen ausgelassen.");
       }
     }
+
+    base.umbuchungen = leseUmbuchungen(m?.umbuchungen, base.konten);
     state.months[key] = base;
+  }
+
+  if (konvertiert > 0) {
+    repariert.push(
+      "Die festen Einnahmefelder wurden zu frei benennbaren Konten. Sie lassen "
+      + "sich jetzt umbenennen, ergänzen und einzeln von der Berechnung ausnehmen."
+    );
+  }
+  if (ausGelb > 0) {
+    repariert.push(
+      (ausGelb === 1 ? "Eine Zeile war" : ausGelb + " Zeilen waren")
+      + " mit Gelb als „Investition gebunden“ markiert und heisst jetzt "
+      + "„Investition blockiert“ (lila). Gelb steht neu für Sparen."
+    );
   }
 
   if (Object.keys(state.months).length === 0) {

@@ -6,7 +6,7 @@ import {
   sankeyLayout, kuchenLayout, ringPfad, bandPfad, beschrifte, beschriftungsLayout, ROLLE
 } from "../src/shared/fluss.mjs";
 import { emptyMonth, totals } from "../src/shared/budget.mjs";
-import { beispielMonat } from "./fixtures.mjs";
+import { beispielMonat, kontoBetrag } from "./fixtures.mjs";
 
 /* Beispielmonat: Mittel 5600, Kosten 2800 (DA 1800, Fix 250, KK 500, Re 250),
    Restwert 2800. */
@@ -17,7 +17,7 @@ import { beispielMonat } from "./fixtures.mjs";
 
 test("Herkunft trennt Einkommen, Bestand und Geliehenes", () => {
   const m = beispielMonat();
-  m.einnahmen.fremdschulden = 300;
+  kontoBetrag(m, "Geliehen", 300);
 
   const q = herkunft(m);
   assert.deepEqual(q.map((x) => x.key), ["erwerb", "bestand", "geliehen"]);
@@ -28,14 +28,14 @@ test("Herkunft trennt Einkommen, Bestand und Geliehenes", () => {
 
 test("Quellen ohne Betrag tauchen gar nicht erst auf", () => {
   const m = emptyMonth();
-  m.einnahmen.netto = 4000;
+  kontoBetrag(m, "Nettolohn", 4000);
   assert.deepEqual(herkunft(m).map((x) => x.key), ["erwerb"], "kein leerer Knoten im Bild");
 });
 
 test("ein Monat im Minus zeigt die Deckungslücke als Quelle", () => {
   const m = emptyMonth();
-  m.einnahmen.netto = 1000;
-  m.ausgaben = [{ id: "r", name: "Grosse Rechnung", betrag: 1500, tag: "rot" }];
+  kontoBetrag(m, "Nettolohn", 1000);
+  m.ausgaben = [{ id: "r", name: "Grosse Rechnung", betrag: 1500, klasse: "ausgaben" }];
 
   const q = herkunft(m);
   const luecke = q.find((x) => x.rolle === ROLLE.luecke);
@@ -58,16 +58,16 @@ test("gleich grosse Blöcke bekommen trotzdem verschiedene Stufen", () => {
 
 test("bei negativem Restwert erscheint kein Restwert-Knoten", () => {
   const m = emptyMonth();
-  m.einnahmen.netto = 1000;
-  m.ausgaben = [{ id: "r", name: "Rechnung", betrag: 1500, tag: "rot" }];
+  kontoBetrag(m, "Nettolohn", 1000);
+  m.ausgaben = [{ id: "r", name: "Rechnung", betrag: 1500, klasse: "ausgaben" }];
   assert.ok(!verwendung(m).some((x) => x.rolle === ROLLE.rest));
 });
 
 test("Herkunft und Verwendung summieren sich auf denselben Betrag", () => {
   for (const monat of [beispielMonat(), (() => {
     const m = emptyMonth();
-    m.einnahmen.netto = 1000;
-    m.ausgaben = [{ id: "r", name: "R", betrag: 1500, tag: "rot" }];
+    kontoBetrag(m, "Nettolohn", 1000);
+    m.ausgaben = [{ id: "r", name: "R", betrag: 1500, klasse: "ausgaben" }];
     return m;
   })()]) {
     const d = flussDaten(monat);
@@ -150,25 +150,27 @@ test("Bandpfade sind wohlgeformt", () => {
  */
 function monatMitWinzigenPosten() {
   const m = emptyMonth();
-  m.einnahmen = { netto: 4800, spesen: 100, konto: 80, bar: 20, fremdschulden: 0 };
+  for (const [name, wert] of [["Nettolohn", 4800], ["Spesen", 100], ["Kontostand", 80], ["Bargeld", 20]]) {
+    m.konten.find((k) => k.name === name).betrag = wert;
+  }
   m.dauerauftraege = [
-    { id: "1", name: "Miete", betrag: 1200, tag: "rot" },
-    { id: "2", name: "Leasing", betrag: 300, tag: "rot" },
-    { id: "3", name: "Sparplan", betrag: 100, tag: "gruen" },
-    { id: "4", name: "Vorsorge", betrag: 100, tag: "gelb" }
+    { id: "1", name: "Miete", betrag: 1200, klasse: "ausgaben" },
+    { id: "2", name: "Leasing", betrag: 300, klasse: "ausgaben" },
+    { id: "3", name: "Sparplan", betrag: 100, klasse: "investition" },
+    { id: "4", name: "Vorsorge", betrag: 100, klasse: "blockiert" }
   ];
   m.fixkosten = [
-    { id: "5", name: "Abo", betrag: 30, tag: "rot" },
-    { id: "6", name: "Versicherung", betrag: 45, tag: "rot" }
+    { id: "5", name: "Abo", betrag: 30, klasse: "ausgaben" },
+    { id: "6", name: "Versicherung", betrag: 45, klasse: "ausgaben" }
   ];
   m.kreditkarten = [
     { id: "7", name: "Erste", betrag: 1200, limit: 2000 },
     { id: "8", name: "Zweite", betrag: 300, limit: 1000 }
   ];
   m.ausgaben = [
-    { id: "9", name: "Steuer", betrag: 1000, tag: "rot" },
-    { id: "10", name: "Reparatur", betrag: 550, tag: "rot" },
-    { id: "11", name: "Kleinteil", betrag: 50, tag: "rot" }
+    { id: "9", name: "Steuer", betrag: 1000, klasse: "ausgaben" },
+    { id: "10", name: "Reparatur", betrag: 550, klasse: "ausgaben" },
+    { id: "11", name: "Kleinteil", betrag: 50, klasse: "ausgaben" }
   ];
   return m;
 }
@@ -278,8 +280,8 @@ test("jedes Segment bekommt einen gültigen Pfad", () => {
 
 test("ein einzelner Posten entartet nicht zum Nullbogen", () => {
   const m = emptyMonth();
-  m.einnahmen.netto = 1000;
-  m.fixkosten = [{ id: "f", name: "Alles", betrag: 1000, tag: "rot" }];
+  kontoBetrag(m, "Nettolohn", 1000);
+  m.fixkosten = [{ id: "f", name: "Alles", betrag: 1000, klasse: "ausgaben" }];
 
   const plan = kuchenLayout(flussDaten(m));
   assert.equal(plan.segmente.length, 1);
