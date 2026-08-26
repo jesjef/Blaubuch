@@ -65,13 +65,16 @@ verschiedene Antworten:
   werden kann."* — **Systemeinstellungen → Datenschutz & Sicherheit**,
   dort unten auf **Trotzdem öffnen**. Das ist die normale Warnung vor
   Software ohne bezahltes Zertifikat.
-- *„… ist beschädigt und kann nicht geöffnet werden."* — die App ist
-  nicht beschädigt; es ist die Quarantänemarkierung, die macOS jedem
-  Download anheftet. Einmal im Terminal:
+- *„… ist beschädigt und kann nicht geöffnet werden."* — das betrifft die
+  Fassungen bis einschliesslich 1.0.1. Sie waren fehlerhaft verpackt: das
+  Programmpaket trug nur die Restsignatur des Linkers, die weder die
+  Ressourcen noch die `Info.plist` abdeckt. macOS wertet das als
+  Manipulation und bietet folgerichtig nur den Papierkorb an. **Das
+  Entfernen der Quarantänemarkierung behebt das nicht** — es braucht eine
+  gültige Signatur. Nimm 1.0.2 oder neuer.
 
-  ```bash
-  xattr -dr com.apple.quarantine /Applications/Blaubuch.app
-  ```
+Der Weg *Rechtsklick auf die App → Öffnen* stand hier früher und ist
+seit macOS 15 wirkungslos; Apple hat ihn entfernt.
 
 Die macOS-Fassung trägt eine Ad-hoc-Signatur. Ohne sie startet auf Apple
 Silicon gar nichts. Sie enthält kein Zertifikat und sagt nichts darüber

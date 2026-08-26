@@ -3,8 +3,13 @@
  *
  * Warum es das gibt: `"identity": null` in package.json weist
  * electron-builder an, das Signieren zu ueberspringen — nachzulesen in
- * app-builder-lib, handleNullIdentity(). Das Ergebnis ist ein Programm
- * ganz ohne Signatur.
+ * app-builder-lib, handleNullIdentity().
+ *
+ * Uebrig bleibt dann nicht etwa nichts, sondern die Restsignatur des
+ * Linkers: sie deckt die Haupt-Binary ab, aber weder die Ressourcen noch
+ * die Info.plist. `codesign -dv` zeigt das als `Sealed Resources=none`,
+ * `Info.plist=not bound` und einen Identifier, der noch `Electron` heisst.
+ * Fuer macOS sieht ein solches Paket nach Manipulation aus.
  *
  * Auf Apple Silicon fuehrt der Kernel kein arm64-Programm ohne Signatur
  * aus. Der Anwender sieht dann nicht die uebliche Warnung vor einem

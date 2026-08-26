@@ -97,12 +97,36 @@ jobs:
       - name: macOS — Signatur und Architekturen prüfen
         if: matrix.os == 'macos-latest'
         run: |
-          set -e
+          set -eu
           gefunden=0
           for app in dist/*/Blaubuch.app; do
             echo "== $app"
             codesign --verify --deep --strict --verbose=2 "$app"
-            codesign -dv --verbose=4 "$app" 2>&1 | grep -E "Identifier|Signature|Format"
+
+            beleg=$(codesign -dv --verbose=4 "$app" 2>&1)
+            echo "$beleg" | grep -E "Identifier|Format|Sealed Resources|Info.plist" || true
+
+            # Drei Werte, an denen v1.0.1 erkennbar gewesen wäre. Es reicht
+            # nicht, dass codesign --verify durchläuft: eine Restsignatur des
+            # Electron-Downloads besteht die Prüfung für sich genommen, deckt
+            # aber weder Ressourcen noch Info.plist ab.
+            ident=$(echo "$beleg" | sed -n "s/^Identifier=//p")
+            if [ "$ident" != "ch.jjlabs.blaubuch" ]; then
+              echo "FEHLER: Identifier ist '$ident', erwartet ch.jjlabs.blaubuch."
+              echo "Ein Identifier wie 'Electron' heisst: das Bundle wurde nie neu signiert."
+              exit 1
+            fi
+
+            if echo "$beleg" | grep -q "^Sealed Resources=none"; then
+              echo "FEHLER: Sealed Resources=none — die Ressourcen sind nicht mitsigniert."
+              exit 1
+            fi
+
+            if echo "$beleg" | grep -q "Info.plist=not bound"; then
+              echo "FEHLER: Info.plist ist nicht mitsigniert."
+              exit 1
+            fi
+
             lipo -archs "$app/Contents/MacOS/Blaubuch"
             gefunden=$((gefunden + 1))
           done
@@ -150,10 +174,9 @@ jobs:
             **Systemeinstellungen → Datenschutz & Sicherheit**, dort unten
             auf **Trotzdem öffnen**.
 
-            Meldet es stattdessen, die App sei **beschädigt**, liegt es an
-            der Quarantänemarkierung des Downloads. Einmal im Terminal:
-
-                xattr -dr com.apple.quarantine /Applications/Blaubuch.app
+            Meldet es stattdessen, die App sei **beschädigt**, ist es eine
+            Fassung bis 1.0.1. Die war fehlerhaft verpackt; das Entfernen der
+            Quarantänemarkierung allein behebt das nicht. Nimm 1.0.2 oder neuer.
 
             Die App trägt eine Ad-hoc-Signatur. Sie sorgt dafür, dass das
             Programm auf Apple Silicon überhaupt startet — sie sagt nichts
