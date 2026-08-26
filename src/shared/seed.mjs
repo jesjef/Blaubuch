@@ -8,7 +8,7 @@
  * Wer aus einer bestehenden Datei kommt, nimmt „Daten einlesen …“.
  */
 
-import { SCHEMA_VERSION, emptyMonth } from "./budget.mjs";
+import { SCHEMA_VERSION, emptyMonth, standardKlassen, standardKonten } from "./budget.mjs";
 
 /** Schluessel des laufenden Monats, z. B. "2026-08". */
 export function currentMonthKey(datum = new Date()) {
@@ -17,10 +17,19 @@ export function currentMonthKey(datum = new Date()) {
 
 export function createSeedState(datum = new Date()) {
   const key = currentMonthKey(datum);
-  return {
+
+  /* Klassifizierungen und Konten gehoeren von Anfang an in den Stammsatz.
+     Ohne Konto liesse sich keine Zeile buchen, und ohne Klassifizierung
+     nicht einordnen — beides waere kein benutzbarer Startzustand. Die
+     Namen sind Bezeichnungen des Programms, keine erfundenen Zahlen. */
+  const state = {
     version: SCHEMA_VERSION,
     updatedAt: new Date().toISOString(),
     currentMonth: key,
-    months: { [key]: emptyMonth() }
+    klassen: standardKlassen(),
+    konten: standardKonten(),
+    months: {}
   };
+  state.months[key] = emptyMonth(state);
+  return state;
 }

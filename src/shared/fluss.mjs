@@ -36,12 +36,13 @@ export const ROLLE = {
  * Ist der Monat im Minus, erscheint die Differenz als Deckungslücke —
  * sonst ginge die Bilanz im Bild nicht auf.
  */
-export function herkunft(month) {
-  const t = totals(month);
+export function herkunft(state, month) {
+  const t = totals(state, month);
   const aus = [];
 
   if (t.erwerb > 0) aus.push({ key: "erwerb", name: "Einkommen", wert: t.erwerb, rolle: ROLLE.einkommen });
   if (t.bestand > 0) aus.push({ key: "bestand", name: "Bestand", wert: t.bestand, rolle: ROLLE.bestand });
+  if (t.sonstige > 0) aus.push({ key: "sonstige", name: "Sonstige Mittel", wert: t.sonstige, rolle: ROLLE.bestand });
   if (t.geliehen > 0) aus.push({ key: "geliehen", name: "Geliehen", wert: t.geliehen, rolle: ROLLE.geliehen });
   if (t.rest < 0) aus.push({ key: "luecke", name: "Deckungslücke", wert: -t.rest, rolle: ROLLE.luecke });
 
@@ -52,8 +53,8 @@ export function herkunft(month) {
  * Wohin die Mittel gehen: die Kostenblöcke absteigend nach Betrag,
  * danach der Restwert. Die Reihenfolge ist zugleich die Farbreihenfolge.
  */
-export function verwendung(month) {
-  const t = totals(month);
+export function verwendung(state, month) {
+  const t = totals(state, month);
 
   const bloecke = [
     { key: "da", name: "Daueraufträge", wert: t.da },
@@ -72,9 +73,9 @@ export function verwendung(month) {
 }
 
 /** Beide Seiten plus die Summe, die sie verbindet. */
-export function flussDaten(month) {
-  const links = herkunft(month);
-  const rechts = verwendung(month);
+export function flussDaten(state, month) {
+  const links = herkunft(state, month);
+  const rechts = verwendung(state, month);
   const summe = links.reduce((s, x) => s + x.wert, 0);
   return { links, rechts, summe, leer: summe <= 0 || rechts.length === 0 };
 }

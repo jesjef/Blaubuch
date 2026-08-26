@@ -6,7 +6,13 @@ import {
   sankeyLayout, kuchenLayout, ringPfad, bandPfad, beschrifte, beschriftungsLayout, ROLLE
 } from "../src/shared/fluss.mjs";
 import { emptyMonth, totals } from "../src/shared/budget.mjs";
-import { beispielMonat } from "./fixtures.mjs";
+import { beispielMonat, beispielState, KONTO_HAUPT, KONTO_BAR } from "./fixtures.mjs";
+
+/* Seit Fassung 6 rechnet der Kern gegen den Stammsatz — Konten und
+   Klassifizierungen liegen dort. Die Monate unten stammen alle aus
+   derselben Vorlage, also genuegt ein gemeinsamer Stamm. */
+const stamm = beispielState();
+const leererMonat = () => emptyMonth(stamm);
 
 /* Beispielmonat: Mittel 5600, Kosten 2800 (DA 1800, Fix 250, KK 500, Re 250),
    Restwert 2800. */
@@ -17,9 +23,9 @@ import { beispielMonat } from "./fixtures.mjs";
 
 test("Herkunft trennt Einkommen, Bestand und Geliehenes", () => {
   const m = beispielMonat();
-  m.einnahmen.fremdschulden = 300;
+  m.einnahmen.push({ id: "g", name: "Geliehen", betrag: 300, art: "geliehen", konto: KONTO_HAUPT, aktiv: true });
 
-  const q = herkunft(m);
+  const q = herkunft(stamm, m);
   assert.deepEqual(q.map((x) => x.key), ["erwerb", "bestand", "geliehen"]);
   assert.equal(q[0].wert, 5200);
   assert.equal(q[1].wert, 400);
@@ -27,50 +33,50 @@ test("Herkunft trennt Einkommen, Bestand und Geliehenes", () => {
 });
 
 test("Quellen ohne Betrag tauchen gar nicht erst auf", () => {
-  const m = emptyMonth();
-  m.einnahmen.netto = 4000;
-  assert.deepEqual(herkunft(m).map((x) => x.key), ["erwerb"], "kein leerer Knoten im Bild");
+  const m = leererMonat();
+  m.einnahmen = [{ id: "e", name: "Nettolohn", betrag: 4000, art: "erwerb", konto: KONTO_HAUPT, aktiv: true }];
+  assert.deepEqual(herkunft(stamm, m).map((x) => x.key), ["erwerb"], "kein leerer Knoten im Bild");
 });
 
 test("ein Monat im Minus zeigt die Deckungslücke als Quelle", () => {
-  const m = emptyMonth();
-  m.einnahmen.netto = 1000;
-  m.ausgaben = [{ id: "r", name: "Grosse Rechnung", betrag: 1500, tag: "rot" }];
+  const m = leererMonat();
+  m.einnahmen = [{ id: "e", name: "Nettolohn", betrag: 1000, art: "erwerb", konto: KONTO_HAUPT, aktiv: true }];
+  m.ausgaben = [{ id: "r", name: "Grosse Rechnung", betrag: 1500, klasse: "ausgaben", vonKonto: KONTO_HAUPT }];
 
-  const q = herkunft(m);
+  const q = herkunft(stamm, m);
   const luecke = q.find((x) => x.rolle === ROLLE.luecke);
   assert.ok(luecke, "sonst ginge die Bilanz im Bild nicht auf");
   assert.equal(luecke.wert, 500);
 });
 
 test("Verwendung sortiert die Kostenblöcke absteigend, Restwert zuletzt", () => {
-  const v = verwendung(beispielMonat());
+  const v = verwendung(stamm, beispielMonat());
   assert.deepEqual(v.map((x) => x.key), ["da", "kk", "fix", "re", "rest"]);
   assert.deepEqual(v.slice(0, 4).map((x) => x.stufe), [0, 1, 2, 3], "die Reihenfolge ist die Farbstufe");
   assert.equal(v.at(-1).rolle, ROLLE.rest);
 });
 
 test("gleich grosse Blöcke bekommen trotzdem verschiedene Stufen", () => {
-  const v = verwendung(beispielMonat());
+  const v = verwendung(stamm, beispielMonat());
   const stufen = v.filter((x) => x.rolle === ROLLE.kosten).map((x) => x.stufe);
   assert.equal(new Set(stufen).size, stufen.length, "keine doppelte Verlaufsstufe");
 });
 
 test("bei negativem Restwert erscheint kein Restwert-Knoten", () => {
-  const m = emptyMonth();
-  m.einnahmen.netto = 1000;
-  m.ausgaben = [{ id: "r", name: "Rechnung", betrag: 1500, tag: "rot" }];
-  assert.ok(!verwendung(m).some((x) => x.rolle === ROLLE.rest));
+  const m = leererMonat();
+  m.einnahmen = [{ id: "e", name: "Nettolohn", betrag: 1000, art: "erwerb", konto: KONTO_HAUPT, aktiv: true }];
+  m.ausgaben = [{ id: "r", name: "Rechnung", betrag: 1500, klasse: "ausgaben", vonKonto: KONTO_HAUPT }];
+  assert.ok(!verwendung(stamm, m).some((x) => x.rolle === ROLLE.rest));
 });
 
 test("Herkunft und Verwendung summieren sich auf denselben Betrag", () => {
   for (const monat of [beispielMonat(), (() => {
-    const m = emptyMonth();
-    m.einnahmen.netto = 1000;
-    m.ausgaben = [{ id: "r", name: "R", betrag: 1500, tag: "rot" }];
+    const m = leererMonat();
+    m.einnahmen = [{ id: "e", name: "Nettolohn", betrag: 1000, art: "erwerb", konto: KONTO_HAUPT, aktiv: true }];
+    m.ausgaben = [{ id: "r", name: "R", betrag: 1500, klasse: "ausgaben", vonKonto: KONTO_HAUPT }];
     return m;
   })()]) {
-    const d = flussDaten(monat);
+    const d = flussDaten(stamm, monat);
     const rechts = d.rechts.reduce((s, x) => s + x.wert, 0);
     assert.equal(
       Math.round(d.summe * 100) / 100,
@@ -81,7 +87,7 @@ test("Herkunft und Verwendung summieren sich auf denselben Betrag", () => {
 });
 
 test("ein leerer Monat wird als leer gemeldet statt gezeichnet", () => {
-  assert.equal(flussDaten(emptyMonth()).leer, true);
+  assert.equal(flussDaten(stamm, leererMonat()).leer, true);
 });
 
 /* ------------------------------------------------------------------ *
@@ -89,7 +95,7 @@ test("ein leerer Monat wird als leer gemeldet statt gezeichnet", () => {
  * ------------------------------------------------------------------ */
 
 test("Sankey legt alle Knoten innerhalb der Zeichenfläche ab", () => {
-  const plan = sankeyLayout(flussDaten(beispielMonat()), { breite: 360, hoehe: 250 });
+  const plan = sankeyLayout(flussDaten(stamm, beispielMonat()), { breite: 360, hoehe: 250 });
   for (const k of plan.knoten) {
     assert.ok(k.y >= 0, k.name + " ragt oben heraus");
     assert.ok(k.y + k.h <= 250.5, k.name + " ragt unten heraus");
@@ -99,7 +105,7 @@ test("Sankey legt alle Knoten innerhalb der Zeichenfläche ab", () => {
 });
 
 test("Knotenhöhen verhalten sich wie die Beträge", () => {
-  const daten = flussDaten(beispielMonat());
+  const daten = flussDaten(stamm, beispielMonat());
   const plan = sankeyLayout(daten, { breite: 360, hoehe: 250 });
   const rechts = plan.knoten.filter((k) => k.seite === "rechts");
 
@@ -110,21 +116,21 @@ test("Knotenhöhen verhalten sich wie die Beträge", () => {
 });
 
 test("es gibt genau ein Band je Quelle und je Verwendung", () => {
-  const daten = flussDaten(beispielMonat());
+  const daten = flussDaten(stamm, beispielMonat());
   const plan = sankeyLayout(daten);
   assert.equal(plan.baender.length, daten.links.length + daten.rechts.length);
   assert.equal(new Set(plan.baender.map((b) => b.key)).size, plan.baender.length, "doppelte Bänder");
 });
 
 test("die Nabe ist so hoch wie die Zeichenfläche und liegt in der Mitte", () => {
-  const plan = sankeyLayout(flussDaten(beispielMonat()), { breite: 360, hoehe: 250, randOben: 8, randUnten: 8 });
+  const plan = sankeyLayout(flussDaten(stamm, beispielMonat()), { breite: 360, hoehe: 250, randOben: 8, randUnten: 8 });
   const nabe = plan.knoten.find((k) => k.seite === "mitte");
   assert.equal(nabe.h, 234);
   assert.ok(Math.abs(nabe.x + nabe.breite / 2 - 180) < 0.6, "die Nabe sitzt nicht mittig");
 });
 
 test("Sankey eines leeren Monats zeichnet nichts", () => {
-  const plan = sankeyLayout(flussDaten(emptyMonth()));
+  const plan = sankeyLayout(flussDaten(stamm, leererMonat()));
   assert.deepEqual(plan.knoten, []);
   assert.deepEqual(plan.baender, []);
 });
@@ -149,32 +155,36 @@ test("Bandpfade sind wohlgeformt", () => {
  * einer echten Buchhaltung — Tests wandern ins oeffentliche Repository.
  */
 function monatMitWinzigenPosten() {
-  const m = emptyMonth();
-  m.einnahmen = { netto: 4800, spesen: 100, konto: 80, bar: 20, fremdschulden: 0 };
+  const m = leererMonat();
+  m.anfangsbestaende = { [KONTO_HAUPT]: 80, [KONTO_BAR]: 20 };
+  m.einnahmen = [
+    { id: "e1", name: "Nettolohn", betrag: 4800, art: "erwerb", konto: KONTO_HAUPT, aktiv: true },
+    { id: "e2", name: "Spesen", betrag: 100, art: "erwerb", konto: KONTO_HAUPT, aktiv: true }
+  ];
   m.dauerauftraege = [
-    { id: "1", name: "Miete", betrag: 1200, tag: "rot" },
-    { id: "2", name: "Leasing", betrag: 300, tag: "rot" },
-    { id: "3", name: "Sparplan", betrag: 100, tag: "gruen" },
-    { id: "4", name: "Vorsorge", betrag: 100, tag: "gelb" }
+    { id: "1", name: "Miete", betrag: 1200, klasse: "ausgaben", vonKonto: KONTO_HAUPT, aktiv: true },
+    { id: "2", name: "Leasing", betrag: 300, klasse: "ausgaben", vonKonto: KONTO_HAUPT, aktiv: true },
+    { id: "3", name: "Sparplan", betrag: 100, klasse: "investition", vonKonto: KONTO_HAUPT, aktiv: true },
+    { id: "4", name: "Vorsorge", betrag: 100, klasse: "blockiert", vonKonto: KONTO_HAUPT, aktiv: true }
   ];
   m.fixkosten = [
-    { id: "5", name: "Abo", betrag: 30, tag: "rot" },
-    { id: "6", name: "Versicherung", betrag: 45, tag: "rot" }
+    { id: "5", name: "Abo", betrag: 30, klasse: "ausgaben", vonKonto: KONTO_HAUPT, aktiv: true },
+    { id: "6", name: "Versicherung", betrag: 45, klasse: "ausgaben", vonKonto: KONTO_HAUPT, aktiv: true }
   ];
   m.kreditkarten = [
-    { id: "7", name: "Erste", betrag: 1200, limit: 2000 },
-    { id: "8", name: "Zweite", betrag: 300, limit: 1000 }
+    { id: "7", name: "Erste", betrag: 1200, limit: 2000, vonKonto: KONTO_HAUPT },
+    { id: "8", name: "Zweite", betrag: 300, limit: 1000, vonKonto: KONTO_HAUPT }
   ];
   m.ausgaben = [
-    { id: "9", name: "Steuer", betrag: 1000, tag: "rot" },
-    { id: "10", name: "Reparatur", betrag: 550, tag: "rot" },
-    { id: "11", name: "Kleinteil", betrag: 50, tag: "rot" }
+    { id: "9", name: "Steuer", betrag: 1000, klasse: "ausgaben", vonKonto: KONTO_HAUPT, aktiv: true },
+    { id: "10", name: "Reparatur", betrag: 550, klasse: "ausgaben", vonKonto: KONTO_HAUPT, aktiv: true },
+    { id: "11", name: "Kleinteil", betrag: 50, klasse: "ausgaben", vonKonto: KONTO_HAUPT, aktiv: true }
   ];
   return m;
 }
 
 test("winzige Posten erzeugen ohne Entzerrung überlappende Beschriftungen", () => {
-  const plan = sankeyLayout(flussDaten(monatMitWinzigenPosten()));
+  const plan = sankeyLayout(flussDaten(stamm, monatMitWinzigenPosten()));
   const rechts = plan.knoten.filter((k) => k.seite === "rechts");
   const mitten = rechts.map((k) => k.y + k.h / 2);
 
@@ -183,7 +193,7 @@ test("winzige Posten erzeugen ohne Entzerrung überlappende Beschriftungen", () 
 });
 
 test("nach der Entzerrung hält jede Beschriftung den Mindestabstand", () => {
-  const plan = sankeyLayout(flussDaten(monatMitWinzigenPosten()));
+  const plan = sankeyLayout(flussDaten(stamm, monatMitWinzigenPosten()));
   for (const seite of ["links", "rechts"]) {
     const gruppe = plan.knoten.filter((k) => k.seite === seite);
     const marken = beschriftungsLayout(gruppe, { hoehe: plan.hoehe, mindestAbstand: 24 });
@@ -198,7 +208,7 @@ test("nach der Entzerrung hält jede Beschriftung den Mindestabstand", () => {
 });
 
 test("Beschriftungen bleiben innerhalb der Zeichenfläche", () => {
-  const plan = sankeyLayout(flussDaten(monatMitWinzigenPosten()));
+  const plan = sankeyLayout(flussDaten(stamm, monatMitWinzigenPosten()));
   const gruppe = plan.knoten.filter((k) => k.seite === "rechts");
   const marken = beschriftungsLayout(gruppe, { hoehe: 250, randOben: 10, randUnten: 16 });
   for (const m of marken) {
@@ -210,7 +220,7 @@ test("Beschriftungen bleiben innerhalb der Zeichenfläche", () => {
 });
 
 test("verschobene Beschriftungen sind als solche gekennzeichnet", () => {
-  const plan = sankeyLayout(flussDaten(monatMitWinzigenPosten()));
+  const plan = sankeyLayout(flussDaten(stamm, monatMitWinzigenPosten()));
   const gruppe = plan.knoten.filter((k) => k.seite === "rechts");
   const marken = beschriftungsLayout(gruppe, { hoehe: plan.hoehe });
 
@@ -221,7 +231,7 @@ test("verschobene Beschriftungen sind als solche gekennzeichnet", () => {
 });
 
 test("die Reihenfolge der Beschriftungen bleibt erhalten", () => {
-  const plan = sankeyLayout(flussDaten(monatMitWinzigenPosten()));
+  const plan = sankeyLayout(flussDaten(stamm, monatMitWinzigenPosten()));
   const gruppe = plan.knoten.filter((k) => k.seite === "rechts");
   const marken = beschriftungsLayout(gruppe, { hoehe: plan.hoehe });
 
@@ -232,7 +242,7 @@ test("die Reihenfolge der Beschriftungen bleibt erhalten", () => {
 });
 
 test("bei reichlich Platz bleibt jede Beschriftung an ihrem Knoten", () => {
-  const plan = sankeyLayout(flussDaten(beispielMonat()));
+  const plan = sankeyLayout(flussDaten(stamm, beispielMonat()));
   const gruppe = plan.knoten.filter((k) => k.seite === "links");
   const marken = beschriftungsLayout(gruppe, { hoehe: plan.hoehe });
   assert.ok(marken.every((m) => !m.verschoben), "ohne Not darf nichts verrückt werden");
@@ -261,14 +271,14 @@ test("mehr Posten als Platz: es wird gleichmässig verteilt statt gestapelt", ()
  * ------------------------------------------------------------------ */
 
 test("die Ringanteile ergeben zusammen hundert Prozent", () => {
-  const plan = kuchenLayout(flussDaten(beispielMonat()));
+  const plan = kuchenLayout(flussDaten(stamm, beispielMonat()));
   const summe = plan.segmente.reduce((s, x) => s + x.anteil, 0);
   assert.ok(Math.abs(summe - 1) < 1e-9, "Anteile summieren sich zu " + summe);
   assert.equal(plan.gesamt, 5600);
 });
 
 test("jedes Segment bekommt einen gültigen Pfad", () => {
-  const plan = kuchenLayout(flussDaten(beispielMonat()));
+  const plan = kuchenLayout(flussDaten(stamm, beispielMonat()));
   assert.ok(plan.segmente.length > 0);
   for (const s of plan.segmente) {
     assert.match(s.d, /^M .* A .* Z$/, s.name + ": " + s.d);
@@ -277,18 +287,18 @@ test("jedes Segment bekommt einen gültigen Pfad", () => {
 });
 
 test("ein einzelner Posten entartet nicht zum Nullbogen", () => {
-  const m = emptyMonth();
-  m.einnahmen.netto = 1000;
-  m.fixkosten = [{ id: "f", name: "Alles", betrag: 1000, tag: "rot" }];
+  const m = leererMonat();
+  m.einnahmen = [{ id: "e", name: "Nettolohn", betrag: 1000, art: "erwerb", konto: KONTO_HAUPT, aktiv: true }];
+  m.fixkosten = [{ id: "f", name: "Alles", betrag: 1000, klasse: "ausgaben", vonKonto: KONTO_HAUPT }];
 
-  const plan = kuchenLayout(flussDaten(m));
+  const plan = kuchenLayout(flussDaten(stamm, m));
   assert.equal(plan.segmente.length, 1);
   assert.ok(!/NaN/.test(plan.segmente[0].d));
   assert.ok(plan.segmente[0].anteil > 0.999);
 });
 
 test("der Ring bleibt innerhalb seines Rahmens", () => {
-  const plan = kuchenLayout(flussDaten(beispielMonat()), { cx: 80, cy: 125, rAussen: 68, rInnen: 42 });
+  const plan = kuchenLayout(flussDaten(stamm, beispielMonat()), { cx: 80, cy: 125, rAussen: 68, rInnen: 42 });
   const zahlen = plan.segmente.flatMap((s) => s.d.match(/-?\d+(\.\d+)?/g).map(Number));
   assert.ok(Math.min(...zahlen) >= 0, "negative Koordinate im Ring");
   assert.ok(Math.max(...zahlen) <= 250, "Ring ragt aus dem Rahmen");
@@ -300,7 +310,7 @@ test("ringPfad erzeugt bei sinnvollen Winkeln saubere Zahlen", () => {
 });
 
 test("Ring eines leeren Monats bleibt leer", () => {
-  assert.deepEqual(kuchenLayout(flussDaten(emptyMonth())).segmente, []);
+  assert.deepEqual(kuchenLayout(flussDaten(stamm, leererMonat())).segmente, []);
 });
 
 /* ------------------------------------------------------------------ *
@@ -308,7 +318,7 @@ test("Ring eines leeren Monats bleibt leer", () => {
  * ------------------------------------------------------------------ */
 
 test("Beschriftungen nennen Betrag und Anteil", () => {
-  const daten = flussDaten(beispielMonat());
+  const daten = flussDaten(stamm, beispielMonat());
   const t = beschrifte(daten.rechts[0], daten.summe);
   assert.equal(t.name, "Daueraufträge");
   assert.match(t.betrag, /1.800\.00 Fr\./);
@@ -326,8 +336,8 @@ test("Beschriftung teilt nicht durch null", () => {
 
 test("die Verwendung stimmt mit den Kartensummen überein", () => {
   const m = beispielMonat();
-  const t = totals(m);
-  const v = verwendung(m);
+  const t = totals(stamm, m);
+  const v = verwendung(stamm, m);
   const finde = (k) => v.find((x) => x.key === k)?.wert ?? 0;
 
   assert.equal(finde("da"), t.da);

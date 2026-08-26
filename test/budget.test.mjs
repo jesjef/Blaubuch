@@ -7,7 +7,17 @@ import {
   emptyMonth, KEIN_LIMIT, SCHEMA_VERSION, nachbarMonat
 } from "../src/shared/budget.mjs";
 import { createSeedState, currentMonthKey } from "../src/shared/seed.mjs";
-import { beispielMonat, beispielState } from "./fixtures.mjs";
+import {
+  beispielMonat, beispielState, einnahmeBetrag, anfangsbestand,
+  fuegeEinnahmeHinzu, KONTO_HAUPT, KONTO_BAR
+} from "./fixtures.mjs";
+
+/* Seit Fassung 6 rechnet der Kern gegen den Stammsatz: Konten und
+   Klassifizierungen liegen dort, nicht im Monat. `totals` liest daraus nur
+   diese beiden — ein gemeinsamer Stamm genuegt deshalb fuer alle Monate,
+   die aus derselben Vorlage stammen. */
+const stamm = beispielState();
+const leererMonat = () => emptyMonth(stamm);
 
 /**
  * Node und Chromium setzen im de-CH-Format unterschiedliche Apostrophe
@@ -51,7 +61,7 @@ test("formatCHF schreibt Betraege schweizerisch", () => {
  * ------------------------------------------------------------------ */
 
 test("totals rechnet einen Beispielmonat korrekt", () => {
-  const t = totals(beispielMonat());
+  const t = totals(stamm, beispielMonat());
 
   assert.equal(t.erwerb, 5200, "Netto plus Spesen");
   assert.equal(t.bestand, 400, "Konto plus Bar");
@@ -67,26 +77,26 @@ test("totals rechnet einen Beispielmonat korrekt", () => {
 test("die Etiketten summieren sich exakt zu den Gesamtkosten", () => {
   const state = beispielState();
   for (const key of Object.keys(state.months)) {
-    const t = totals(state.months[key]);
-    const summe = Math.round((t.byTag.rot + t.byTag.gruen + t.byTag.gelb) * 100) / 100;
+    const t = totals(stamm, state.months[key]);
+    const summe = Math.round((t.byKlasse.ausgaben + t.byKlasse.investition + t.byKlasse.blockiert) * 100) / 100;
     assert.equal(summe, t.kosten, "Etikettensumme weicht ab in " + key);
   }
 });
 
 test("der Kreditkartensaldo zaehlt als Konsum", () => {
-  const t = totals(beispielMonat());
-  assert.equal(t.byTag.gruen, 300, "nur der Sparplan ist gruen");
-  assert.equal(t.byTag.rot, 2500, "alles Uebrige inklusive der 500 Kartensaldo");
+  const t = totals(stamm, beispielMonat());
+  assert.equal(t.byKlasse.investition, 300, "nur der Sparplan ist gruen");
+  assert.equal(t.byKlasse.ausgaben, 2500, "alles Uebrige inklusive der 500 Kartensaldo");
 });
 
 test("Sparquote misst am Erwerbseinkommen, nicht an Bestand oder Darlehen", () => {
-  const monat = emptyMonth();
-  monat.einnahmen.netto = 5000;
-  const ohne = totals(monat).sparquote;
+  const monat = leererMonat();
+  fuegeEinnahmeHinzu(monat, "Nettolohn", 5000, "erwerb");
+  const ohne = totals(stamm, monat).sparquote;
 
-  monat.einnahmen.konto = 4000;
-  monat.einnahmen.fremdschulden = 1000;
-  const mit = totals(monat);
+  anfangsbestand(monat, KONTO_HAUPT, 4000);
+  fuegeEinnahmeHinzu(monat, "Geliehen", 1000, "geliehen");
+  const mit = totals(stamm, monat);
 
   assert.equal(ohne, 100, "ohne Kosten bleibt alles uebrig");
   assert.equal(mit.erwerb, 5000, "Bestand und Darlehen sind kein Einkommen");
@@ -94,12 +104,15 @@ test("Sparquote misst am Erwerbseinkommen, nicht an Bestand oder Darlehen", () =
   assert.ok(mit.sparquote > 100, "die Bezugsgroesse bleibt aber das Einkommen");
 });
 
-test("Einnahmen kennen genau fuenf Felder", () => {
+test("ein frischer Monat kennt jedes Konto, aber noch keine Einnahmezeile", () => {
+  const monat = leererMonat();
+  assert.deepEqual(monat.einnahmen, [], "Einnahmen sind seit Fassung 6 Zeilen, keine festen Felder");
   assert.deepEqual(
-    Object.keys(emptyMonth().einnahmen),
-    ["netto", "spesen", "konto", "bar", "fremdschulden"],
-    "kommt ein Feld dazu, muss auch die Oberflaeche es zeigen"
+    Object.keys(monat.anfangsbestaende).sort(),
+    stamm.konten.map((k) => k.id).sort(),
+    "jedes Konto im Stamm bekommt einen Anfangsbestand — sonst fehlt es in der Rechnung"
   );
+  assert.ok(Object.values(monat.anfangsbestaende).every((b) => b === 0));
 });
 
 test("Felder aus einer Altfassung werden beim Einlesen verworfen", () => {
@@ -114,22 +127,22 @@ test("Felder aus einer Altfassung werden beim Einlesen verworfen", () => {
   const einnahmen = state.months["2026-08"].einnahmen;
   assert.ok(!("kontouebertrag" in einnahmen), "das alte Feld ist weg");
   assert.ok(!("irgendwas" in einnahmen), "unbekannte Felder werden nicht uebernommen");
-  assert.equal(totals(state.months["2026-08"]).einnahmen, 5000, "und beeinflussen die Summe nicht");
+  assert.equal(totals(stamm, state.months["2026-08"]).einnahmen, 5000, "und beeinflussen die Summe nicht");
 });
 
 test("Rappenrundung haelt Summen sauber", () => {
-  const monat = emptyMonth();
+  const monat = leererMonat();
   monat.ausgaben = [
-    { id: "a", name: "A", betrag: 0.1, tag: "rot" },
-    { id: "b", name: "B", betrag: 0.2, tag: "rot" }
+    { id: "a", name: "A", betrag: 0.1, klasse: "ausgaben", vonKonto: KONTO_HAUPT },
+    { id: "b", name: "B", betrag: 0.2, klasse: "ausgaben", vonKonto: KONTO_HAUPT }
   ];
-  assert.equal(totals(monat).re, 0.3, "0.1 + 0.2 darf nicht 0.30000000000000004 ergeben");
+  assert.equal(totals(stamm, monat).re, 0.3, "0.1 + 0.2 darf nicht 0.30000000000000004 ergeben");
 });
 
 test("ein voellig leerer Monat ergibt lauter Nullen statt NaN", () => {
-  const t = totals(emptyMonth());
+  const t = totals(stamm, leererMonat());
   for (const [feld, wert] of Object.entries(t)) {
-    if (feld === "byTag" || feld === "sparquote") continue;
+    if (feld === "byKlasse" || feld === "sparquote") continue;
     assert.equal(wert, 0, feld + " sollte 0 sein");
   }
   assert.equal(t.sparquote, null, "ohne Einkommen gibt es keine Quote");
@@ -160,13 +173,15 @@ test("migrate repariert eine kaputte Datei, statt zu scheitern", () => {
   assert.deepEqual(Object.keys(state.months), ["2026-08"], "ungueltiger Monatsschluessel fliegt raus");
 
   const m = state.months["2026-08"];
-  assert.equal(m.einnahmen.netto, 5000, "Text wird zur Zahl");
-  assert.equal(m.einnahmen.spesen, 0, "null wird zu 0");
+  assert.equal(einnahmeBetrag(m, "Nettolohn"), 5000, "Text wird zur Zahl");
+  assert.equal(einnahmeBetrag(m, "Spesen"), 0, "null wird zu 0");
   assert.equal(m.kreditkarten.length, 1, "namenlose Kartenzeilen fliegen raus");
   assert.equal(m.kreditkarten[0].betrag, 0, "unlesbarer Betrag wird zu 0");
   assert.equal(m.kreditkarten[0].limit, 1000, "das Limit wird gelesen");
   assert.equal(m.dauerauftraege.length, 1, "namenlose und leere Zeilen werden verworfen");
-  assert.equal(m.dauerauftraege[0].tag, "rot", "unbekanntes Etikett faellt auf rot zurueck");
+  assert.equal(m.dauerauftraege[0].klasse, "ausgaben",
+    "eine unbekannte Markierung gilt als ausgegeben — die vorsichtigere Annahme");
+  assert.ok(m.dauerauftraege[0].vonKonto, "und bekommt ein Herkunftskonto");
   assert.ok(m.dauerauftraege[0].id, "fehlende id wird vergeben");
   assert.ok(Array.isArray(m.fixkosten), "fehlende Listen werden angelegt");
   assert.ok(repariert.length >= 2, "Reparaturen werden gemeldet");
@@ -179,7 +194,7 @@ test("Eintraege aus dem alten Feld „rechnungen“ gehen nicht verloren", () =>
     version: 4,
     months: {
       "2026-08": {
-        rechnungen: [{ name: "Zahnarzt", betrag: 250, tag: "rot" }]
+        rechnungen: [{ name: "Zahnarzt", betrag: 250, klasse: "ausgaben", vonKonto: KONTO_HAUPT }]
       }
     }
   });
@@ -187,7 +202,7 @@ test("Eintraege aus dem alten Feld „rechnungen“ gehen nicht verloren", () =>
   const m = state.months["2026-08"];
   assert.equal(m.ausgaben.length, 1, "die alte Liste wird uebernommen");
   assert.equal(m.ausgaben[0].name, "Zahnarzt");
-  assert.equal(totals(m).re, 250, "und zaehlt in der Summe mit");
+  assert.equal(totals(stamm, m).re, 250, "und zaehlt in der Summe mit");
   assert.ok(!("rechnungen" in m), "das alte Feld bleibt nicht daneben stehen");
 });
 
@@ -195,15 +210,15 @@ test("liegen beide Felder vor, gewinnt das neue", () => {
   const { state } = migrate({
     months: {
       "2026-08": {
-        ausgaben: [{ name: "Neu", betrag: 10, tag: "rot" }],
-        rechnungen: [{ name: "Alt", betrag: 999, tag: "rot" }]
+        ausgaben: [{ name: "Neu", betrag: 10, klasse: "ausgaben", vonKonto: KONTO_HAUPT }],
+        rechnungen: [{ name: "Alt", betrag: 999, klasse: "ausgaben", vonKonto: KONTO_HAUPT }]
       }
     }
   });
   const m = state.months["2026-08"];
   assert.equal(m.ausgaben.length, 1);
   assert.equal(m.ausgaben[0].name, "Neu");
-  assert.equal(totals(m).re, 10, "der alte Stand darf nicht doppelt zaehlen");
+  assert.equal(totals(stamm, m).re, 10, "der alte Stand darf nicht doppelt zaehlen");
 });
 
 test("migrate uebersteht voelligen Unsinn", () => {
@@ -259,11 +274,21 @@ test("negative Limits werden auf „kein Limit“ zurueckgesetzt", () => {
 
 test("neuer Monat uebernimmt Wiederkehrendes, aber nichts Einmaliges", () => {
   const vorlage = beispielMonat();
-  const neu = monthFromPrevious(vorlage);
+  const neu = monthFromPrevious(vorlage, "2026-09", stamm);
 
-  assert.equal(neu.einnahmen.netto, 5000, "Gehalt wird uebernommen");
-  assert.equal(neu.einnahmen.spesen, 0, "Spesen nicht");
-  assert.equal(neu.einnahmen.konto, 0, "Kontostand nicht");
+  assert.equal(einnahmeBetrag(neu, "Nettolohn"), 5000, "Gehalt wird uebernommen");
+  /* Seit Fassung 6 entscheidet die Art, nicht der Feldname: Erwerb
+     wiederholt sich Monat fuer Monat, also auch die Spesen. Frueher blieb
+     nur „netto" stehen und die Spesen fielen unter den Tisch. */
+  assert.equal(einnahmeBetrag(neu, "Spesen"), 200, "auch die Spesen — sie sind Erwerb");
+  /* Der Endbestand des Vormonats steht als Vorschlag da — fortgeschrieben
+     wird nichts, ueberschreiben bleibt moeglich. Auf dem Hauptkonto sind es
+     2700, die uebrigen 100 liegen als Bargeld daneben. */
+  assert.equal(anfangsbestand(neu, KONTO_HAUPT), 2700);
+  assert.equal(anfangsbestand(neu, KONTO_BAR), 100);
+  const summe = stamm.konten.reduce((s, k) => s + anfangsbestand(neu, k.id), 0);
+  assert.equal(summe, totals(stamm, vorlage).rest,
+    "die Summe der Kontosalden ist der Restwert — sonst ist eine Buchung verlorengegangen");
   assert.equal(neu.dauerauftraege.length, 2, "Auftraege kommen mit");
   assert.equal(neu.fixkosten.length, 2);
   assert.deepEqual(neu.ausgaben, [], "Ausgaben sind einmalig");
@@ -275,7 +300,7 @@ test("neuer Monat uebernimmt Wiederkehrendes, aber nichts Einmaliges", () => {
 });
 
 test("monthFromPrevious kommt auch ohne Vorlage klar", () => {
-  assert.equal(totals(monthFromPrevious(undefined)).kosten, 0);
+  assert.equal(totals(stamm, monthFromPrevious(undefined, "2026-09", stamm)).kosten, 0);
 });
 
 test("Monatsschluessel: Pruefung und Fortschreibung", () => {
@@ -297,7 +322,7 @@ const alsText = (insights) =>
 
 test("Analyse warnt bei Darlehen im Restwert", () => {
   const state = beispielState();
-  state.months["2026-08"].einnahmen.fremdschulden = 500;
+  fuegeEinnahmeHinzu(state.months["2026-08"], "Geliehen", 500, "geliehen");
   assert.ok(
     alsText(buildInsights(state, "2026-08")).some((t) => t.includes("geliehenes Geld")),
     "ein Darlehen im Restwert muss benannt werden"
@@ -329,7 +354,7 @@ test("Analyse liefert bei leerem Monat trotzdem eine Aussage", () => {
 
 test("Analyse enthaelt kein Markup — die Oberflaeche setzt nie innerHTML", () => {
   const state = beispielState();
-  state.months["2026-08"].ausgaben.push({ id: "x", name: "<script>böse</script>", betrag: 10, tag: "rot" });
+  state.months["2026-08"].ausgaben.push({ id: "x", name: "<script>böse</script>", betrag: 10, klasse: "ausgaben", vonKonto: KONTO_HAUPT });
 
   for (const key of Object.keys(state.months)) {
     for (const ins of buildInsights(state, key)) {
@@ -349,8 +374,9 @@ test("Bericht nennt Einkommen und Bestand getrennt", () => {
   const bericht = norm(buildReport(beispielState(), "2026-08"));
 
   assert.ok(bericht.includes("Erwerbseinkommen des Monats: 5'200.00 Fr."));
-  assert.ok(bericht.includes("Bestand, kein Einkommen"));
-  assert.ok(bericht.includes("geliehen, rückzahlbar"));
+  assert.ok(bericht.includes("Bestand zu Monatsbeginn: 400.00 Fr. (kein Einkommen)"));
+  assert.ok(bericht.includes("KONTEN (Stand am Monatsende)"), "die Konten stehen jetzt oben");
+  assert.ok(bericht.includes("Nettolohn → Kontostand"), "jede Einnahme nennt ihr Zielkonto");
   assert.ok(bericht.includes("RESTWERT: 2'800.00 Fr."));
   assert.ok(bericht.includes("Sparquote auf Erwerbseinkommen: 53.8%"));
 });
@@ -377,7 +403,7 @@ test("eine frische Installation startet leer", () => {
   assert.deepEqual(m.dauerauftraege, [], "keine vorgegebenen Auftraege");
   assert.deepEqual(m.fixkosten, [], "keine vorgegebenen Fixkosten");
   assert.deepEqual(m.ausgaben, []);
-  assert.equal(totals(m).einnahmen, 0);
+  assert.equal(totals(stamm, m).einnahmen, 0);
   assert.deepEqual(m.kreditkarten, [], "keine vorgegebenen Karten");
 });
 
@@ -399,14 +425,26 @@ test("der Startzustand enthaelt weder Namen noch Betraege", () => {
       for (const zeile of liste) { namen.push(zeile.name); betraege.push(zeile.betrag); }
     }
     for (const k of monat.kreditkarten) { namen.push(k.name); betraege.push(k.betrag, k.limit); }
-    betraege.push(...Object.values(monat.einnahmen));
+    for (const e of monat.einnahmen) { namen.push(e.name); betraege.push(e.betrag); }
+    betraege.push(...Object.values(monat.anfangsbestaende));
   }
 
   assert.deepEqual(namen, [], "der Startzustand darf keine einzige benannte Zeile mitbringen");
   assert.ok(betraege.every((b) => b === 0), "jeder Betrag im Startzustand muss 0 sein");
 
+  /* Konten und Klassifizierungen tragen Namen, aber es sind Bezeichnungen
+     des Programms und keine Daten eines Menschen. Ohne sie waere der
+     Startzustand nicht benutzbar: keine Zeile liesse sich buchen oder
+     einordnen. Geprueft wird, dass es genau die mitgelieferten sind. */
+  assert.deepEqual(state.konten.map((k) => k.name), ["Kontostand", "Bargeld"]);
+  assert.deepEqual(
+    state.klassen.map((k) => k.id),
+    ["ausgaben", "investition", "sparen", "blockiert", "durchlauf"]
+  );
+
   /* Nichts Unerwartetes im Datensatz — etwa Notizfelder aus einer Altfassung. */
-  assert.deepEqual(Object.keys(state).sort(), ["currentMonth", "months", "updatedAt", "version"]);
+  assert.deepEqual(Object.keys(state).sort(),
+    ["currentMonth", "klassen", "konten", "months", "updatedAt", "version"]);
 });
 
 test("currentMonthKey formatiert einstellige Monate mit fuehrender Null", () => {
