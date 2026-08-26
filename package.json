@@ -1,7 +1,7 @@
 {
   "name": "blaubuch",
   "productName": "Blaubuch",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Monatsbudget für den Schweizer Alltag — lokal, ohne Konto, ohne Cloud.",
   "keywords": [
     "budget",
@@ -48,6 +48,7 @@
       "src/**/*",
       "!**/*.map"
     ],
+    "afterPack": "tools/adhoc-sign.js",
     "win": {
       "target": [
         "portable"

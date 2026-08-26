@@ -51,11 +51,31 @@ Fertige Dateien unter [Releases](../../releases):
 | System | Datei | Hinweis beim ersten Start |
 |---|---|---|
 | Windows | `Blaubuch-*-portable.exe` | SmartScreen: *Weitere Informationen → Trotzdem ausführen* |
-| macOS Apple Silicon | `Blaubuch-*-arm64.dmg` | Rechtsklick auf die App → *Öffnen* → *Öffnen* |
-| macOS Intel | `Blaubuch-*-x64.dmg` | wie oben |
+| macOS Apple Silicon | `Blaubuch-*-arm64.dmg` | siehe unten |
+| macOS Intel | `Blaubuch-*-x64.dmg` | siehe unten |
 
-Keine Installation nötig. Keine der Fassungen ist signiert — daher die
-Hinweise oben. Sie erscheinen genau einmal.
+Keine Installation nötig. Keine der Fassungen trägt ein
+Entwicklerzertifikat — daher die Hinweise. Sie erscheinen genau einmal.
+
+**macOS im Einzelnen.** App aus dem `.dmg` nach *Programme* ziehen, dann
+öffnen. Zwei verschiedene Meldungen sind möglich, und sie brauchen
+verschiedene Antworten:
+
+- *„… kann nicht geöffnet werden, da der Entwickler nicht verifiziert
+  werden kann."* — **Systemeinstellungen → Datenschutz & Sicherheit**,
+  dort unten auf **Trotzdem öffnen**. Das ist die normale Warnung vor
+  Software ohne bezahltes Zertifikat.
+- *„… ist beschädigt und kann nicht geöffnet werden."* — die App ist
+  nicht beschädigt; es ist die Quarantänemarkierung, die macOS jedem
+  Download anheftet. Einmal im Terminal:
+
+  ```bash
+  xattr -dr com.apple.quarantine /Applications/Blaubuch.app
+  ```
+
+Die macOS-Fassung trägt eine Ad-hoc-Signatur. Ohne sie startet auf Apple
+Silicon gar nichts. Sie enthält kein Zertifikat und sagt nichts darüber
+aus, wer das Programm gebaut hat — sie sorgt nur dafür, dass es läuft.
 
 Beim ersten Start legst du ein Passwort fest. Damit werden deine Zahlen auf
 der Festplatte verschlüsselt. **Für ein vergessenes Passwort gibt es keine

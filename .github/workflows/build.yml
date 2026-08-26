@@ -70,17 +70,51 @@ jobs:
 
       # Das .zip zuerst: es braucht nur das Packen. Scheitert danach das .dmg
       # an den Werkzeugen des Systems, sind die .zip-Dateien trotzdem da.
+      #
+      # --arm64 --x64 muss ausgeschrieben werden. Ein Ziel auf der
+      # Kommandozeile ersetzt die Zielliste aus package.json samt der dort
+      # genannten Architekturen; ohne die Angabe baut electron-builder nur
+      # für die Architektur des Läufers. macos-latest ist Apple Silicon —
+      # v1.0.1 kam deshalb ohne Intel-Dateien heraus, obwohl jeder Schritt
+      # als erfolgreich galt.
       - name: macOS — .zip (arm64 und x64)
         if: matrix.os == 'macos-latest'
-        run: npx electron-builder --mac zip --publish never
+        run: npx electron-builder --mac zip --arm64 --x64 --publish never
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: false
 
       - name: macOS — .dmg (arm64 und x64)
         if: matrix.os == 'macos-latest'
-        run: npx electron-builder --mac dmg --publish never
+        run: npx electron-builder --mac dmg --arm64 --x64 --publish never
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: false
+
+      # Beweist, was sonst nur behauptet wäre: dass die Ad-hoc-Signatur aus
+      # tools/adhoc-sign.js sitzt und dass wirklich beide Architekturen
+      # vorliegen. Ohne Signatur startet das Programm auf Apple Silicon nicht
+      # und meldet „beschädigt“ — das soll hier auffallen und nicht beim
+      # Anwender.
+      - name: macOS — Signatur und Architekturen prüfen
+        if: matrix.os == 'macos-latest'
+        run: |
+          set -e
+          gefunden=0
+          for app in dist/*/Blaubuch.app; do
+            echo "== $app"
+            codesign --verify --deep --strict --verbose=2 "$app"
+            codesign -dv --verbose=4 "$app" 2>&1 | grep -E "Identifier|Signature|Format"
+            lipo -archs "$app/Contents/MacOS/Blaubuch"
+            gefunden=$((gefunden + 1))
+          done
+          test "$gefunden" -eq 2 || { echo "Erwartet: zwei Programmordner (arm64 und x64), gefunden: $gefunden"; exit 1; }
+
+      - name: macOS — vier Dateien erwartet
+        if: matrix.os == 'macos-latest'
+        run: |
+          set -e
+          ls -1 dist/*.dmg dist/*.zip
+          anzahl=$(ls -1 dist/*.dmg dist/*.zip | wc -l | tr -d ' ')
+          test "$anzahl" -eq 4 || { echo "Erwartet: 2 x .dmg und 2 x .zip, gefunden: $anzahl"; exit 1; }
 
       # `always()`: auch ein Teilergebnis ist mehr wert als keines.
       - name: Ergebnis sichern
@@ -105,11 +139,22 @@ jobs:
             dist/*.dmg
             dist/*.zip
           body: |
-            Weder die Windows- noch die macOS-Fassung ist signiert.
+            Keine der Fassungen trägt ein Entwicklerzertifikat. Beide
+            Systeme warnen deshalb beim ersten Start.
 
-            **Windows** meldet beim ersten Start SmartScreen: *Weitere
-            Informationen → Trotzdem ausführen*.
+            **Windows** — SmartScreen: *Weitere Informationen →
+            Trotzdem ausführen*.
 
-            **macOS** meldet, die App stamme von einem nicht verifizierten
-            Entwickler: einmal mit der rechten Maustaste auf die App →
-            *Öffnen* → *Öffnen*. Danach startet sie normal.
+            **macOS** — App nach *Programme* ziehen, dann öffnen. Meldet das
+            System, der Entwickler lasse sich nicht verifizieren:
+            **Systemeinstellungen → Datenschutz & Sicherheit**, dort unten
+            auf **Trotzdem öffnen**.
+
+            Meldet es stattdessen, die App sei **beschädigt**, liegt es an
+            der Quarantänemarkierung des Downloads. Einmal im Terminal:
+
+                xattr -dr com.apple.quarantine /Applications/Blaubuch.app
+
+            Die App trägt eine Ad-hoc-Signatur. Sie sorgt dafür, dass das
+            Programm auf Apple Silicon überhaupt startet — sie sagt nichts
+            darüber aus, wer es gebaut hat.

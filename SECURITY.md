@@ -104,6 +104,18 @@ falsch lange Felder werden abgewiesen, statt sie zu verarbeiten.
 | Atomares Schreiben über temporäre Datei und Umbenennen | [`src/main/store.js`](src/main/store.js) |
 | Keine Laufzeitabhängigkeiten ausser Electron selbst | [`package.json`](package.json) |
 
+## Die Ad-hoc-Signatur ist keine Vertrauensaussage
+
+Die macOS-Fassung wird beim Bauen ad-hoc signiert
+([`tools/adhoc-sign.js`](tools/adhoc-sign.js)). Das ist eine technische
+Notwendigkeit, keine Beglaubigung: auf Apple Silicon führt der Kernel kein
+Programm ohne Signatur aus. Eine Ad-hoc-Signatur enthält **kein
+Zertifikat**, nennt keinen Urheber und ist von niemandem geprüft. Sie sagt
+nur: dieses Programm ist seit dem Signieren nicht verändert worden.
+
+Wer der Datei trauen will, hat weiterhin genau einen belastbaren Weg —
+selbst aus dem Quelltext bauen. Die Windows-Fassung ist gar nicht signiert.
+
 ## Was bewusst unverschlüsselt ist
 
 - **Zwischenablage**: *Bericht kopieren* legt den Monatsbericht im Klartext
