@@ -77,6 +77,28 @@ export function nextMonthKey(key) {
 export const sortedMonths = (state) => Object.keys(state.months).sort();
 
 /**
+ * Welcher Monat nach dem Loeschen anzuzeigen ist.
+ *
+ * Bevorzugt der naechstaeltere — man loescht meist den neuesten und will
+ * dann dorthin, wo man herkam. Gibt es keinen aelteren, der aelteste der
+ * verbliebenen. Ist nichts mehr da, null.
+ *
+ * Steht bewusst hier und nicht in der Oberflaeche: die frueher dort
+ * stehende Fassung rechnete `rest.indexOf(key)` NACH dem Loeschen und
+ * bekam deshalb immer -1 zurueck — `Math.max(0, -2)` ergab 0, also landete
+ * jeder Loeschvorgang auf dem aeltesten Monat statt beim Nachbarn. Zwei von
+ * vier Faellen bestanden zufaellig, was den Fehler lange verdeckt hat.
+ */
+export function nachbarMonat(keys, geloescht) {
+  const rest = keys.filter((k) => k !== geloescht);
+  if (rest.length === 0) return null;
+  /* Monatsschluessel sind YYYY-MM — der Textvergleich ist zugleich der
+     zeitliche. */
+  const aeltere = rest.filter((k) => k < geloescht);
+  return aeltere.length > 0 ? aeltere[aeltere.length - 1] : rest[0];
+}
+
+/**
  * Summen eines Monats.
  *
  * Bewusst getrennt:

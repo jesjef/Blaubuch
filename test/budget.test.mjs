@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import {
   parseAmount, formatCHF, totals, migrate, monthFromPrevious,
   buildInsights, buildReport, monthLabel, isMonthKey, nextMonthKey,
-  emptyMonth, KEIN_LIMIT, SCHEMA_VERSION
+  emptyMonth, KEIN_LIMIT, SCHEMA_VERSION, nachbarMonat
 } from "../src/shared/budget.mjs";
 import { createSeedState, currentMonthKey } from "../src/shared/seed.mjs";
 import { beispielMonat, beispielState } from "./fixtures.mjs";
@@ -412,4 +412,31 @@ test("der Startzustand enthaelt weder Namen noch Betraege", () => {
 test("currentMonthKey formatiert einstellige Monate mit fuehrender Null", () => {
   assert.equal(currentMonthKey(new Date("2026-01-15T12:00:00Z")), "2026-01");
   assert.equal(currentMonthKey(new Date("2026-12-31T12:00:00Z")), "2026-12");
+});
+
+/* ------------------------------------------------------------------ *
+ * Nach dem Loeschen eines Monats
+ * ------------------------------------------------------------------ */
+
+test("nach dem Löschen wird der Nachbarmonat gezeigt, nicht der älteste", () => {
+  const drei = ["2026-06", "2026-07", "2026-08"];
+
+  /* Der haeufigste Fall: den neuesten Monat loeschen. Genau hier lag der
+     Fehler — die Oberflaeche landete auf 2026-06 statt auf 2026-07. */
+  assert.equal(nachbarMonat(drei, "2026-08"), "2026-07", "der nächstältere");
+  assert.equal(nachbarMonat(drei, "2026-07"), "2026-06");
+
+  /* Den aeltesten geloescht: es gibt keinen aelteren, also der naechste. */
+  assert.equal(nachbarMonat(drei, "2026-06"), "2026-07", "sonst der nächstjüngere");
+
+  /* Ueber eine Luecke hinweg und ueber den Jahreswechsel. */
+  assert.equal(nachbarMonat(["2025-11", "2026-03", "2026-04"], "2026-04"), "2026-03");
+  assert.equal(nachbarMonat(["2025-12", "2026-01"], "2026-01"), "2025-12", "Jahreswechsel");
+
+  /* Ein Monat, den es in der Liste gar nicht gibt: nichts faellt weg, und
+     der naechstaeltere zu 2030-01 ist der neueste vorhandene. */
+  assert.equal(nachbarMonat(drei, "2030-01"), "2026-08");
+
+  assert.equal(nachbarMonat(["2026-08"], "2026-08"), null, "war es der letzte, bleibt nichts");
+  assert.equal(nachbarMonat([], "2026-08"), null);
 });

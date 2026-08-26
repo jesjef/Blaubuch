@@ -152,7 +152,8 @@ export function baueEinstellungen(aktionen) {
   koerper.lastChild.append(farbHinweis);
 
   koerper.append(knopfgruppe("Monat", null, [
-    knopf("Bericht kopieren", () => aktionen.bericht(), "btn-report")
+    knopf("Bericht kopieren", () => aktionen.bericht(), "btn-report"),
+    knopf("Diesen Monat löschen …", () => { dialog.close(); aktionen.monatLoeschen(); })
   ]));
 
   koerper.append(knopfgruppe("Daten", "Sicherungen liegen verschlüsselt im Datenordner.", [

@@ -9,7 +9,7 @@
 import {
   TAGS, TAG_TITLE, SCHEMA_VERSION,
   formatCHF, parseAmount, monthLabel, isMonthKey, nextMonthKey, sortedMonths,
-  totals, buildInsights, buildReport, migrate, monthFromPrevious, uid
+  totals, buildInsights, buildReport, migrate, monthFromPrevious, uid, nachbarMonat
 } from "../shared/budget.mjs";
 import { createSeedState } from "../shared/seed.mjs";
 import { openVault, changePassword, askForeignPassword } from "./lock.mjs";
@@ -703,7 +703,8 @@ const einstellungen = baueEinstellungen({
   beiDarstellung: () => aktualisiereThemaKnopf?.(),
   datenLoeschen: () => eintraegeLoeschen(),
   kontoZuruecksetzen: () => kontoZuruecksetzen(),
-  beiSperrzeit: () => sperrWaechter.neuLesen()
+  beiSperrzeit: () => sperrWaechter.neuLesen(),
+  monatLoeschen: () => monatLoeschen()
 });
 
 /**
@@ -892,8 +893,7 @@ async function monatLoeschen() {
 
   pushUndo("Monat " + monthLabel(key) + " gelöscht");
   delete state.months[key];
-  const rest = sortedMonths(state);
-  state.currentMonth = rest[Math.max(0, rest.indexOf(key) - 1)] ?? rest[0];
+  state.currentMonth = nachbarMonat(keys, key);
   touch();
   render();
   announce(monthLabel(key) + " gelöscht");
