@@ -121,6 +121,36 @@ handle("store:export", async (_ev, { text, klartext }) => {
     : store.exportEncrypted(String(text ?? ""), filePath);
 });
 
+/**
+ * Markdown-Auszug ueber alle Monate. Er verlaesst den Tresor im Klartext,
+ * deshalb dieselbe Warnung wie bei der unverschluesselten Kopie — nur der
+ * Zweck ist ein anderer: nachlesen, ausdrucken, weitergeben.
+ */
+handle("store:export-markdown", async (_ev, text) => {
+  const { response } = await dialog.showMessageBox(mainWindow, {
+    type: "warning",
+    buttons: ["Trotzdem sichern", "Abbrechen"],
+    defaultId: 1,
+    cancelId: 1,
+    title: "Auszug sichern",
+    message: "Dieser Auszug ist für jeden lesbar.",
+    detail: "Alle Beträge, Namen und Salden stehen im Klartext in der Datei. "
+      + "Gedacht zum Nachlesen und Weitergeben — nicht als Sicherung und nicht "
+      + "in einem Cloud-Ordner."
+  });
+  if (response !== 0) return { ok: false, canceled: true };
+
+  const wann = new Date().toISOString().slice(0, 10);
+  const { canceled, filePath } = await dialog.showSaveDialog(mainWindow, {
+    title: "Auszug als Markdown sichern",
+    defaultPath: path.join(app.getPath("documents"), "blaubuch-auszug-" + wann + ".md"),
+    filters: [{ name: "Markdown", extensions: ["md"] }]
+  });
+  if (canceled || !filePath) return { ok: false, canceled: true };
+
+  return store.exportPlain(String(text ?? ""), filePath);
+});
+
 handle("store:import", async () => {
   const { canceled, filePaths } = await dialog.showOpenDialog(mainWindow, {
     title: "Blaubuch-Daten einlesen",

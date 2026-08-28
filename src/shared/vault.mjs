@@ -25,7 +25,7 @@
  *    erleichtern, macht die Datei damit unlesbar statt schwaecher.
  */
 
-import { randomBytes, scrypt as scryptCb, createCipheriv, createDecipheriv, timingSafeEqual } from "node:crypto";
+import { randomBytes, scrypt as scryptCb, createCipheriv, createDecipheriv } from "node:crypto";
 import { promisify } from "node:util";
 
 /* Weitergereicht, damit Aufrufer im Hauptprozess nur ein Modul brauchen.
@@ -240,10 +240,3 @@ export async function create(plaintext, password, kdf = KDF_STANDARD) {
   return { text: encrypt(plaintext, key, params), key, ...params };
 }
 
-/** Vergleicht zwei Passwoerter ohne verwertbaren Zeitunterschied. */
-export function samePassword(a, b) {
-  const ba = Buffer.from(String(a ?? "").normalize("NFC"), "utf8");
-  const bb = Buffer.from(String(b ?? "").normalize("NFC"), "utf8");
-  if (ba.length !== bb.length) return false;
-  return timingSafeEqual(ba, bb);
-}

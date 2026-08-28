@@ -14,6 +14,7 @@ import {
   STANDARD_KLASSE, WIRKUNG_TITEL, WIRKUNGEN, klasseVon, FARB_KEYS, farbe
 } from "../shared/budget.mjs";
 import { createSeedState } from "../shared/seed.mjs";
+import { buildMarkdown } from "../shared/markdown.mjs";
 import { openVault, changePassword, askForeignPassword } from "./lock.mjs";
 import { verbindeSchalter, verbindePrivatSchalter } from "./thema.mjs";
 import { baueEinstellungen } from "./einstellungen.mjs";
@@ -1402,6 +1403,17 @@ function addKlasseControl() {
   return wrap;
 }
 
+/** Markdown-Auszug ueber alle Monate — zum Nachlesen und Weitergeben. */
+async function sichereAuszug() {
+  const res = await window.blaubuch.exportMarkdown(buildMarkdown(state));
+  if (res.ok) {
+    showNotice("Auszug gesichert: " + res.path
+      + " — die Datei ist unverschlüsselt, bewahre sie entsprechend auf.", "warn");
+  } else if (!res.canceled) {
+    showNotice("Sichern fehlgeschlagen: " + res.error, "err");
+  }
+}
+
 async function sichereKopie(klartext) {
   const res = await window.blaubuch.exportTo(JSON.stringify(state, null, 2), klartext);
   if (res.ok) {
@@ -1424,6 +1436,7 @@ const einstellungen = baueEinstellungen({
     showNotice("Monatsbericht kopiert — kann jetzt eingefügt werden.");
   },
   kopieSichern: (klartext) => sichereKopie(klartext),
+  auszug: () => sichereAuszug(),
   einlesen: () => importieren(),
   ordner: () => window.blaubuch.reveal(),
   passwort: () => passwortAendern(),

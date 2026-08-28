@@ -182,6 +182,7 @@ export function baueEinstellungen(aktionen) {
   koerper.append(knopfgruppe("Daten", "Sicherungen liegen verschlüsselt im Datenordner.", [
     knopf("Verschlüsselte Kopie sichern …", () => aktionen.kopieSichern(false)),
     knopf("Unverschlüsselte Kopie …", () => aktionen.kopieSichern(true)),
+    knopf("Auszug als Markdown …", () => aktionen.auszug()),
     knopf("Daten einlesen …", () => { dialog.close(); aktionen.einlesen(); }),
     knopf("Datenordner öffnen", () => aktionen.ordner())
   ]));

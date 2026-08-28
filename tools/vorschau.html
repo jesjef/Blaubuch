@@ -118,6 +118,7 @@
     resetAll: async () => { gespeichert = JSON.stringify(leer); return { ok: true }; },
     write: async (t) => { gespeichert = t; return { ok: true, path: "(Vorschau)", savedAt: new Date().toISOString() }; },
     exportTo: async () => ({ ok: false, canceled: true }),
+    exportMarkdown: async () => ({ ok: false, canceled: true }),
     importFrom: async () => ({ ok: false, canceled: true }),
     decryptForeign: async () => ({ ok: false, code: "wrong_password" }),
     reveal: async () => ({ ok: true }),

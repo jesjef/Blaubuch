@@ -48,6 +48,8 @@ jobs:
             name: Windows
           - os: macos-latest
             name: macOS
+          - os: ubuntu-latest
+            name: Linux
 
     steps:
       - uses: actions/checkout@v4
@@ -131,6 +133,32 @@ jobs:
           done
           test "$gefunden" -eq 2 || { echo "Erwartet: zwei Programmordner (arm64 und x64), gefunden: $gefunden"; exit 1; }
 
+      # AppImage laeuft ueberall, das RPM ist fuer Jeffreys Fedora. Beide
+      # entstehen aus demselben Bau; electron-builder braucht dafuer keine
+      # Fremdwerkzeuge auf dem Laeufer.
+      # electron-builder ruft fuer das RPM `rpmbuild` auf. Ob es im
+      # Laeuferabbild steckt, ist nicht zugesichert — also ausdruecklich
+      # installieren, statt sich darauf zu verlassen.
+      - name: Linux — Paketwerkzeug
+        if: matrix.os == 'ubuntu-latest'
+        run: sudo apt-get update && sudo apt-get install -y rpm
+
+      - name: Linux — AppImage und RPM
+        if: matrix.os == 'ubuntu-latest'
+        run: npx electron-builder --linux AppImage rpm --publish never
+
+      # Die CI kann nur belegen, dass die Pakete entstehen und lesbar sind.
+      # Ob Blaubuch auf Fedora wirklich startet, prueft Jeffrey.
+      - name: Linux — Pakete pruefen
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          set -e
+          ls -1 dist/*.AppImage dist/*.rpm
+          test -s "$(ls -1 dist/*.AppImage | head -1)" || { echo "AppImage ist leer"; exit 1; }
+          # Kopfdaten des RPM lesen: ein Paket, dessen Namen und Fassung sich
+          # nicht auslesen lassen, waere unbrauchbar ausgeliefert.
+          rpm -qip dist/*.rpm
+
       - name: macOS — zwei Dateien erwartet
         if: matrix.os == 'macos-latest'
         run: |
@@ -154,6 +182,8 @@ jobs:
           path: |
             dist/*.exe
             dist/*.dmg
+            dist/*.AppImage
+            dist/*.rpm
           if-no-files-found: warn
           retention-days: 5
 
@@ -165,9 +195,11 @@ jobs:
           files: |
             dist/*.exe
             dist/*.dmg
+            dist/*.AppImage
+            dist/*.rpm
           body: |
-            Keine der Fassungen trägt ein Entwicklerzertifikat. Beide
-            Systeme warnen deshalb beim ersten Start.
+            Keine der Fassungen trägt ein Entwicklerzertifikat. Windows
+            und macOS warnen deshalb beim ersten Start.
 
             **Windows** — SmartScreen: *Weitere Informationen →
             Trotzdem ausführen*.
@@ -184,3 +216,7 @@ jobs:
             Die App trägt eine Ad-hoc-Signatur. Sie sorgt dafür, dass das
             Programm auf Apple Silicon überhaupt startet — sie sagt nichts
             darüber aus, wer es gebaut hat.
+
+            **Linux** — das **AppImage** ausführbar machen
+            (`chmod +x Blaubuch-*.AppImage`) und starten. Für Fedora und
+            verwandte Systeme liegt zusätzlich ein **RPM** bei.

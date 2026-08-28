@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 
 import {
   create, decrypt, decryptWithKey, deriveKey, encrypt, newVaultParams,
-  readHeader, isVault, passwordStrength, samePassword,
+  readHeader, isVault, passwordStrength,
   VaultError, FORMAT, KDF_STANDARD
 } from "../src/shared/vault.mjs";
 
@@ -210,10 +210,3 @@ test("Passwortbewertung sagt ehrlich, was sie sieht", () => {
   assert.ok(passwordStrength("abcdefghijkl").stufe !== "schwach", "Laenge zaehlt");
 });
 
-test("Passwortvergleich ist laufzeitunabhaengig und trotzdem korrekt", () => {
-  assert.ok(samePassword("abc", "abc"));
-  assert.ok(!samePassword("abc", "abd"));
-  assert.ok(!samePassword("abc", "abcd"), "unterschiedliche Laenge");
-  assert.ok(samePassword("café", "café"), "gleiche Schreibweise nach Normalisierung");
-  assert.ok(!samePassword("abc", null));
-});

@@ -52,6 +52,10 @@ contextBridge.exposeInMainWorld("blaubuch", {
   /** Kopie sichern. klartext=true fragt vorher ausdruecklich nach. */
   exportTo: (text, klartext = false) => ipcRenderer.invoke("store:export", { text, klartext }),
 
+  /* Markdown zum Nachlesen und Weitergeben. Immer Klartext — der
+     Hauptprozess warnt davor wie bei der unverschluesselten Kopie. */
+  exportMarkdown: (text) => ipcRenderer.invoke("store:export-markdown", text),
+
   /** Datei auswaehlen und einlesen. Sagt, ob sie verschluesselt ist. */
   importFrom: () => ipcRenderer.invoke("store:import"),
 
