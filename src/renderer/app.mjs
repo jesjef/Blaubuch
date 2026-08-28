@@ -7,9 +7,10 @@
  */
 
 import {
-  TAGS, TAG_TITLE, SCHEMA_VERSION,
+  SCHEMA_VERSION, EINNAHME_ARTEN, EINNAHME_ART_TITEL,
   formatCHF, parseAmount, monthLabel, isMonthKey, nextMonthKey, sortedMonths,
-  totals, buildInsights, buildReport, migrate, monthFromPrevious, uid, nachbarMonat
+  totals, buildInsights, buildReport, migrate, monthFromPrevious, uid, nachbarMonat,
+  kontoSaldo, istUmbuchung, STANDARD_KLASSE, WIRKUNG_TITEL, klasseVon
 } from "../shared/budget.mjs";
 import { createSeedState } from "../shared/seed.mjs";
 import { openVault, changePassword, askForeignPassword } from "./lock.mjs";
@@ -44,6 +45,11 @@ const refs = {};
 
 const announce = (text) => { liveEl.textContent = text; };
 const currentMonth = () => state.months[state.currentMonth];
+
+/* Konten sind Stammdaten — diese Griffe braucht fast jede Karte. */
+const kontoIdSet = () => new Set((state?.konten ?? []).map((k) => k.id));
+const aktiveKonten = () => (state?.konten ?? []).filter((k) => k.aktiv !== false);
+const erstesAktivesKonto = () => aktiveKonten()[0]?.id ?? state?.konten?.[0]?.id ?? null;
 
 /* ------------------------------------------------------------------ *
  * Speichern
@@ -179,25 +185,68 @@ function amountInput(wert, onChange, label) {
   return i;
 }
 
-function tagButton(item) {
-  const b = el("button", "tag " + (TAGS.includes(item.tag) ? item.tag : "rot"));
+function klasseButton(item) {
+  const b = el("button", "tag");
   b.type = "button";
   const beschriften = () => {
-    const titel = TAG_TITLE[item.tag] + " — klicken zum Wechseln";
+    const k = klasseVon(state.klassen, item.klasse);
+    b.className = "tag kf-" + k.farbe;
+    const titel = k.name + " (" + WIRKUNG_TITEL[k.wirkung] + ") — klicken zum Wechseln";
     b.title = titel;
     b.setAttribute("aria-label", item.name + ": " + titel);
   };
   beschriften();
   b.addEventListener("click", () => {
-    pushUndo(item.name + ": Kategorie");
-    item.tag = TAGS[(TAGS.indexOf(item.tag) + 1) % TAGS.length];
-    b.className = "tag " + item.tag;
+    /* Stillgelegte Klassen bleiben an alten Zeilen, sind aber nicht waehlbar. */
+    const waehlbar = state.klassen.filter((k) => !k.stillgelegt);
+    const liste = waehlbar.length > 0 ? waehlbar : state.klassen;
+    pushUndo(item.name + ": Klassifizierung");
+    const aktuelle = klasseVon(state.klassen, item.klasse);
+    const i = liste.findIndex((k) => k.id === aktuelle.id);
+    item.klasse = liste[(i + 1) % liste.length].id;
     beschriften();
-    announce(item.name + ": " + TAG_TITLE[item.tag]);
+    announce(item.name + ": " + klasseVon(state.klassen, item.klasse).name);
     touch();
     updateComputed();
   });
   return b;
+}
+
+/**
+ * Kontoauswahl als schmales Feld. `mitExtern` erlaubt „extern“ (null) —
+ * fuer Zielkonten: extern heisst, das Geld verlaesst die eigenen Konten
+ * und die Zeile ist eine Ausgabe, keine Umbuchung.
+ */
+function kontoSelect({ wert, onChange, label, mitExtern }) {
+  const s = document.createElement("select");
+  s.className = "konto-wahl";
+  s.setAttribute("aria-label", label);
+
+  const optionen = [];
+  if (mitExtern) optionen.push(["", "extern"]);
+  for (const k of state.konten) {
+    /* Inaktive Konten nur anbieten, wenn die Zeile schon darauf zeigt. */
+    if (k.aktiv === false && k.id !== wert) continue;
+    optionen.push([k.id, k.name]);
+  }
+  /* Ein Verweis auf ein unbekanntes Konto (aus eingelesenen Daten) bleibt
+     sichtbar, statt stillschweigend umgehaengt zu werden. */
+  if (wert && !optionen.some(([id]) => id === wert)) optionen.push([wert, "unbekannt"]);
+
+  for (const [id, name] of optionen) {
+    const o = document.createElement("option");
+    o.value = id;
+    o.textContent = name;
+    o.selected = (wert ?? "") === id;
+    s.append(o);
+  }
+  s.addEventListener("change", () => {
+    pushUndo(label);
+    onChange(s.value === "" ? null : s.value);
+    touch();
+    updateComputed();
+  });
+  return s;
 }
 
 /**
@@ -258,8 +307,9 @@ function nameField(item, onRename) {
 }
 
 function listRow(item, list, listenName) {
+  const block = el("div", "zeile-block");
   const row = el("div", "row");
-  row.append(tagButton(item));
+  row.append(klasseButton(item));
   row.append(nameField(item));
   row.append(amountInput(parseAmount(item.betrag), (v) => { item.betrag = v; }, item.name + " Betrag"));
 
@@ -275,7 +325,39 @@ function listRow(item, list, listenName) {
     render();
   });
   row.append(del);
-  return row;
+
+  /* Von welchem Konto die Zeile geht — und ob sie auf ein eigenes Konto
+     kommt. Dann ist sie eine Umbuchung und zaehlt nicht als Kosten. */
+  const marke = el("span", "umbuchung-marke", "⇄ Umbuchung");
+  marke.title = "Geht auf ein eigenes Konto — zählt nicht als Kosten";
+
+  const zeigeUmbuchung = () => {
+    const ist = istUmbuchung(item, kontoIdSet());
+    block.classList.toggle("umbuchung", ist);
+    marke.hidden = !ist;
+  };
+
+  const kontoZeile = el("div", "konto-zeile");
+  kontoZeile.append(
+    el("span", "kz-label", "von"),
+    kontoSelect({
+      wert: item.vonKonto,
+      onChange: (v) => { item.vonKonto = v; zeigeUmbuchung(); },
+      label: item.name + ": von Konto"
+    }),
+    el("span", "kz-label", "nach"),
+    kontoSelect({
+      wert: item.nachKonto,
+      mitExtern: true,
+      onChange: (v) => { item.nachKonto = v; zeigeUmbuchung(); },
+      label: item.name + ": nach Konto"
+    }),
+    marke
+  );
+  zeigeUmbuchung();
+
+  block.append(row, kontoZeile);
+  return block;
 }
 
 function addControl(label, list, listenName) {
@@ -309,7 +391,14 @@ function addControl(label, list, listenName) {
     const name = nameIn.value.trim();
     if (!name) { nameIn.focus(); return; }
     pushUndo(name + " (" + listenName + ") hinzugefügt");
-    list.push({ id: uid(), name, betrag: parseAmount(betragIn.value), tag: "rot" });
+    list.push({
+      id: uid(), name,
+      betrag: parseAmount(betragIn.value),
+      klasse: STANDARD_KLASSE,
+      vonKonto: erstesAktivesKonto(),
+      nachKonto: null,
+      aktiv: true, faelligAm: null, laeuftBis: null, notiz: ""
+    });
     announce(name + " hinzugefügt");
     touch();
     render();
@@ -419,24 +508,18 @@ function render() {
   const raster = el("div", "sections");
   appEl.append(raster);
 
+  /* Konten */
+  raster.append(buildKonten(d));
+
   /* Einnahmen */
   const ein = card("Einnahmen", true,
-    "Netto und Spesen sind das Einkommen dieses Monats. Konto, Bar und Fremdschulden "
-    + "erhöhen die verfügbaren Mittel, zählen aber nicht als Einkommen.");
+    "Jede Einnahme hat eine Art und ein Zielkonto. Nur Erwerbseinkommen zählt "
+    + "für die Sparquote; Geliehenes und Sonstiges erhöhen die Mittel, "
+    + "Durchlaufgeld zählt nirgends mit.");
   refs.totE = ein.summe;
-  const felder = [
-    ["netto", "Netto Gehalt"],
-    ["spesen", "Spesen"],
-    ["konto", "Konto aktuell"],
-    ["bar", "Bar"],
-    ["fremdschulden", "Fremdschulden (Eingang)"]
-  ];
-  for (const [key, label] of felder) {
-    const row = el("div", "row");
-    row.append(el("span", "name", label));
-    row.append(amountInput(parseAmount(d.einnahmen[key]), (v) => { d.einnahmen[key] = v; }, label));
-    ein.section.append(row);
-  }
+  if (d.einnahmen.length === 0) ein.section.append(el("p", "hint", "Noch keine Einnahmen erfasst."));
+  for (const e of d.einnahmen) ein.section.append(einnahmeRow(e, d.einnahmen));
+  ein.section.append(addEinnahmeControl(d.einnahmen));
   raster.append(ein.section);
 
   /* Daueraufträge */
@@ -481,9 +564,11 @@ function render() {
   an.section.append(spalten);
 
   const legende = el("div", "legend");
-  for (const tg of TAGS) {
-    const sp = el("span", "l-" + tg);
-    sp.append(el("i"), document.createTextNode(TAG_TITLE[tg]));
+  for (const k of state.klassen) {
+    if (k.stillgelegt) continue;
+    const sp = el("span");
+    sp.title = WIRKUNG_TITEL[k.wirkung];
+    sp.append(el("i", "kf-" + k.farbe), document.createTextNode(k.name));
     legende.append(sp);
   }
   an.section.append(legende);
@@ -514,7 +599,7 @@ function buildFluss(d) {
 
   const zeichneNeu = () => {
     buehne.textContent = "";
-    buehne.append(zeichne(d, ansicht));
+    buehne.append(zeichne(state, d, ansicht));
     for (const k of umschalter.children) {
       const aktiv = k.dataset.ansicht === ansicht;
       k.classList.toggle("aktiv", aktiv);
@@ -544,7 +629,7 @@ function buildFluss(d) {
   zahlen.setAttribute("aria-expanded", "false");
   zahlen.addEventListener("click", () => {
     const zeigen = tabelle.hidden;
-    if (zeigen && !tabelle.firstChild) tabelle.append(alsTabelle(d));
+    if (zeigen && !tabelle.firstChild) tabelle.append(alsTabelle(state, d));
     tabelle.hidden = !zeigen;
     zahlen.textContent = zeigen ? "Zahlen ausblenden" : "Zahlen anzeigen";
     zahlen.setAttribute("aria-expanded", String(zeigen));
@@ -564,6 +649,211 @@ let ansicht = (() => {
 })();
 function merkeAnsicht(wert) {
   try { localStorage.setItem(ANSICHT_SCHLUESSEL, wert); } catch { /* egal */ }
+}
+
+/**
+ * Eine Einnahmezeile: Bezeichnung und Betrag oben, Art und Zielkonto in
+ * der kleinen Zeile darunter — dieselbe Grammatik wie bei den Buchungen.
+ */
+function einnahmeRow(e, liste) {
+  const block = el("div", "zeile-block");
+  const row = el("div", "row");
+  row.append(nameField(e));
+  row.append(amountInput(parseAmount(e.betrag), (v) => { e.betrag = v; }, e.name + " Betrag"));
+
+  const del = el("button", "del", "×");
+  del.type = "button";
+  del.title = "Entfernen";
+  del.setAttribute("aria-label", e.name + " entfernen");
+  del.addEventListener("click", () => {
+    pushUndo(e.name + " (Einnahme) gelöscht");
+    liste.splice(liste.indexOf(e), 1);
+    announce(e.name + " entfernt");
+    touch();
+    render();
+  });
+  row.append(del);
+
+  const artSel = document.createElement("select");
+  artSel.className = "konto-wahl";
+  artSel.setAttribute("aria-label", e.name + ": Art der Einnahme");
+  for (const art of EINNAHME_ARTEN) {
+    const o = document.createElement("option");
+    o.value = art;
+    o.textContent = EINNAHME_ART_TITEL[art];
+    o.selected = e.art === art;
+    artSel.append(o);
+  }
+  artSel.addEventListener("change", () => {
+    pushUndo(e.name + ": Art");
+    e.art = artSel.value;
+    touch();
+    updateComputed();
+  });
+
+  const kontoZeile = el("div", "konto-zeile");
+  kontoZeile.append(
+    el("span", "kz-label", "als"),
+    artSel,
+    el("span", "kz-label", "auf"),
+    kontoSelect({
+      wert: e.konto,
+      onChange: (v) => { e.konto = v; },
+      label: e.name + ": Zielkonto"
+    })
+  );
+
+  block.append(row, kontoZeile);
+  return block;
+}
+
+/** Eingabe für eine neue Einnahme: Bezeichnung und Betrag reichen. */
+function addEinnahmeControl(liste) {
+  const wrap = el("div", "add-line");
+  const opener = el("button", "opener", "+ Einnahme");
+  opener.type = "button";
+
+  const form = el("form", "add-form");
+  form.hidden = true;
+
+  const nameIn = document.createElement("input");
+  nameIn.type = "text";
+  nameIn.className = "text";
+  nameIn.placeholder = "Bezeichnung";
+  nameIn.setAttribute("aria-label", "Einnahme Bezeichnung");
+
+  const betragIn = document.createElement("input");
+  betragIn.type = "text";
+  betragIn.className = "amount";
+  betragIn.inputMode = "decimal";
+  betragIn.placeholder = "0.00";
+  betragIn.setAttribute("aria-label", "Einnahme Betrag");
+
+  const ok = el("button", "btn-primary", "Hinzufügen");
+  ok.type = "submit";
+  const cancel = el("button", "btn-plain", "Abbrechen");
+  cancel.type = "button";
+
+  form.addEventListener("submit", (ev) => {
+    ev.preventDefault();
+    const name = nameIn.value.trim();
+    if (!name) { nameIn.focus(); return; }
+    pushUndo(name + " (Einnahme) hinzugefügt");
+    liste.push({
+      id: uid(), name,
+      betrag: parseAmount(betragIn.value),
+      art: "erwerb",
+      konto: erstesAktivesKonto(),
+      aktiv: true, faelligAm: null, notiz: ""
+    });
+    announce(name + " hinzugefügt");
+    touch();
+    render();
+  });
+  cancel.addEventListener("click", () => { form.hidden = true; opener.hidden = false; });
+  opener.addEventListener("click", () => { form.hidden = false; opener.hidden = true; nameIn.focus(); });
+
+  form.append(nameIn, betragIn, ok, cancel);
+  wrap.append(opener, form);
+  return wrap;
+}
+
+/**
+ * Konten sind Stammdaten und gelten fuer alle Monate; nur der
+ * Anfangsbestand gehoert zum Monat. Der Saldo wird gerechnet und nicht
+ * eingetragen. Loeschen gibt es bewusst nicht — alte Monate verweisen auf
+ * das Konto; wer es nicht mehr braucht, nimmt das Haekchen heraus.
+ */
+function buildKonten(d) {
+  const box = card("Konten", false,
+    "Konten gelten für alle Monate. Der Anfangsbestand gehört zum Monat, "
+    + "der Saldo wird gerechnet. Ohne Häkchen zählt ein Konto nicht mit — "
+    + "gelöscht wird nicht, damit alte Monate gültig bleiben.");
+  refs.kontoSalden = [];
+
+  if (state.konten.length > 0) {
+    const kopf = el("div", "row kopfzeile");
+    kopf.append(el("span", "name", "Konto"), el("span", "num", "Anfang"), el("span", "num", "Saldo"), el("span", "platzhalter"));
+    box.section.append(kopf);
+  }
+
+  for (const k of state.konten) {
+    const row = el("div", "row" + (k.aktiv === false ? " konto-inaktiv" : ""));
+    /* Nach dem Umbenennen neu aufbauen — der Name steht auch in den
+       Kontoauswahlen der anderen Karten. */
+    row.append(nameField(k, () => render()));
+    row.append(amountInput(
+      parseAmount(d.anfangsbestaende[k.id]),
+      (v) => { d.anfangsbestaende[k.id] = v; },
+      k.name + " Anfangsbestand"
+    ));
+
+    const saldo = el("span", "konto-saldo");
+    row.append(saldo);
+    refs.kontoSalden.push({ kontoId: k.id, elem: saldo });
+
+    const schalter = document.createElement("input");
+    schalter.type = "checkbox";
+    schalter.className = "konto-aktiv";
+    schalter.checked = k.aktiv !== false;
+    schalter.title = "Zählt mit";
+    schalter.setAttribute("aria-label", k.name + " zählt mit");
+    schalter.addEventListener("change", () => {
+      pushUndo(k.name + (schalter.checked ? " zählt wieder mit" : " ausgenommen"));
+      k.aktiv = schalter.checked;
+      announce(k.name + (k.aktiv ? " zählt wieder mit" : " zählt nicht mehr mit"));
+      touch();
+      render();
+    });
+    row.append(schalter);
+
+    box.section.append(row);
+  }
+
+  box.section.append(addKontoControl());
+  return box.section;
+}
+
+/** Eingabe für ein neues Konto — der Anfangsbestand startet überall bei 0. */
+function addKontoControl() {
+  const wrap = el("div", "add-line");
+  const opener = el("button", "opener", "+ Konto");
+  opener.type = "button";
+
+  const form = el("form", "add-form");
+  form.hidden = true;
+
+  const nameIn = document.createElement("input");
+  nameIn.type = "text";
+  nameIn.className = "text";
+  nameIn.placeholder = "Bezeichnung";
+  nameIn.setAttribute("aria-label", "Name des Kontos");
+
+  const ok = el("button", "btn-primary", "Hinzufügen");
+  ok.type = "submit";
+  const cancel = el("button", "btn-plain", "Abbrechen");
+  cancel.type = "button";
+
+  form.addEventListener("submit", (ev) => {
+    ev.preventDefault();
+    const name = nameIn.value.trim();
+    if (!name) { nameIn.focus(); return; }
+    pushUndo(name + " (Konto) hinzugefügt");
+    const neu = { id: uid(), name, institut: "", aktiv: true };
+    state.konten.push(neu);
+    for (const m of Object.values(state.months)) {
+      if (m.anfangsbestaende[neu.id] === undefined) m.anfangsbestaende[neu.id] = 0;
+    }
+    announce(name + " hinzugefügt");
+    touch();
+    render();
+  });
+  cancel.addEventListener("click", () => { form.hidden = true; opener.hidden = false; });
+  opener.addEventListener("click", () => { form.hidden = false; opener.hidden = true; nameIn.focus(); });
+
+  form.append(nameIn, ok, cancel);
+  wrap.append(opener, form);
+  return wrap;
 }
 
 /**
@@ -605,6 +895,18 @@ function buildKarten(d) {
     });
     row.append(del);
     kk.section.append(row);
+
+    /* Von welchem Konto der Kartensaldo abgeht — der Kontosaldo rechnet damit. */
+    const kontoZeile = el("div", "konto-zeile");
+    kontoZeile.append(
+      el("span", "kz-label", "von"),
+      kontoSelect({
+        wert: karte.vonKonto,
+        onChange: (v) => { karte.vonKonto = v; },
+        label: karte.name + ": von Konto"
+      })
+    );
+    kk.section.append(kontoZeile);
 
     const bar = el("div", "limitbar");
     const fuellung = el("i");
@@ -659,7 +961,9 @@ function addKarteControl(liste) {
       id: uid(),
       name,
       betrag: parseAmount(saldoIn.value),
-      limit: parseAmount(limitIn.value)
+      limit: parseAmount(limitIn.value),
+      vonKonto: erstesAktivesKonto(),
+      notiz: ""
     });
     announce(name + " hinzugefügt");
     touch();
@@ -776,7 +1080,7 @@ async function kontoZuruecksetzen() {
 function updateComputed() {
   if (!refs.v1) return;
   const d = currentMonth();
-  const t = totals(d);
+  const t = totals(state, d);
 
   refs.v1.textContent = formatCHF(t.einnahmen);
   refs.sub1.textContent = "Erwerbseinkommen " + formatCHF(t.erwerb);
@@ -791,6 +1095,12 @@ function updateComputed() {
   refs.totF.textContent = formatCHF(t.fix);
   refs.totK.textContent = formatCHF(t.kk);
   refs.totR.textContent = formatCHF(t.re);
+
+  for (const ks of refs.kontoSalden ?? []) {
+    const saldo = kontoSaldo(state, d, ks.kontoId);
+    ks.elem.textContent = formatCHF(saldo);
+    ks.elem.classList.toggle("neg", saldo < 0);
+  }
 
   for (const c of refs.cards) {
     const wert = parseAmount(c.karte.betrag);
@@ -820,22 +1130,24 @@ function updateComputed() {
 
   refs.breakdown.textContent = "";
   const bloecke = [
-    ["Daueraufträge", t.da, "var(--blue)"],
-    ["Fixkosten", t.fix, "var(--blue)"],
-    ["Kreditkarten", t.kk, "var(--blue)"],
-    ["Ausgaben", t.re, "var(--blue)"],
-    ["· Konsum", t.byTag.rot, "var(--rot)"],
-    ["· Invest. kontrolliert", t.byTag.gruen, "var(--gruen)"],
-    ["· Invest. blockiert", t.byTag.gelb, "var(--gelb)"]
+    ["Daueraufträge", t.da, null],
+    ["Fixkosten", t.fix, null],
+    ["Kreditkarten", t.kk, null],
+    ["Ausgaben", t.re, null],
+    /* Danach dieselben Kosten nach Klassifizierung geschnitten. Durchlauf
+       hat hier nichts verloren: es sind keine Kosten. */
+    ...state.klassen
+      .filter((k) => k.wirkung !== "durchlauf")
+      .map((k) => ["· " + k.name, t.byKlasse[k.id] ?? 0, "kf-" + k.farbe]),
+    ["Umgebucht (keine Kosten)", t.umgebucht, null]
   ];
   const max = Math.max(t.kosten, 1);
-  for (const [label, wert, farbe] of bloecke) {
+  for (const [label, wert, klasse] of bloecke) {
     const brow = el("div", "brow");
     brow.append(el("span", "bl", label));
     const bar = el("div", "bar");
-    const f = el("i");
+    const f = el("i", klasse ?? undefined);
     f.style.width = Math.min(100, (wert / max) * 100) + "%";
-    f.style.background = farbe;
     bar.append(f);
     brow.append(bar, el("span", "bv", formatCHF(wert)));
     refs.breakdown.append(brow);
@@ -869,7 +1181,7 @@ function anlegen(key) {
   }
   pushUndo("Monat " + monthLabel(key) + " angelegt");
   const keys = sortedMonths(state);
-  state.months[key] = monthFromPrevious(state.months[keys[keys.length - 1]]);
+  state.months[key] = monthFromPrevious(state.months[keys[keys.length - 1]], key, state);
   state.currentMonth = key;
   touch();
   render();

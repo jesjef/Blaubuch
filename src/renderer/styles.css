@@ -106,6 +106,19 @@
   --serie-rest: var(--gruen);
   --serie-luecke: var(--rot);
 
+  /* --- Klassifizierungsfarben ---
+     Quelle ist KLASSEN_FARBEN in src/shared/klassen.mjs — dieselben Werte,
+     von tools/pruefe-farben.mjs in beiden Darstellungen geprüft. Wer hier
+     etwas ändert, ändert zuerst dort. */
+  --kf-rot: #C6303E;
+  --kf-orange: #CF630D;
+  --kf-gelb: #B4850E;
+  --kf-gruen: #1E8A4C;
+  --kf-tuerkis: #3B9696;
+  --kf-blau: #0083FD;
+  --kf-lila: #B64FDE;
+  --kf-magenta: #DF3798;
+
   /* --- Masse, die über alle Karten hinweg fluchten müssen --- */
   --amount-w: 5rem;
   --action-w: 1.75rem;
@@ -149,6 +162,15 @@
     --serie-3: oklch(0.570 0.149 var(--h));
     --serie-quelle: oklch(0.577 0.078 var(--h));
     --serie-nabe: oklch(0.722 0.056 var(--h));
+
+    --kf-rot: #F08894;
+    --kf-orange: #FA7C20;
+    --kf-gelb: #E5C05C;
+    --kf-gruen: #6FCB95;
+    --kf-tuerkis: #16BBBC;
+    --kf-blau: #62A7FD;
+    --kf-lila: #CE7DF1;
+    --kf-magenta: #F46EB4;
   }
 }
 
@@ -177,6 +199,15 @@
   --serie-3: oklch(0.570 0.149 var(--h));
   --serie-quelle: oklch(0.577 0.078 var(--h));
   --serie-nabe: oklch(0.722 0.056 var(--h));
+
+  --kf-rot: #F08894;
+  --kf-orange: #FA7C20;
+  --kf-gelb: #E5C05C;
+  --kf-gruen: #6FCB95;
+  --kf-tuerkis: #16BBBC;
+  --kf-blau: #62A7FD;
+  --kf-lila: #CE7DF1;
+  --kf-magenta: #F46EB4;
 }
 
 /* ------------------------------------------------------------------ *
@@ -323,8 +354,8 @@ main {
  * Dasselbe gilt für Flex-Kinder, die kürzbar sein sollen.
  */
 .summary > *, .sections > *, .analyse-spalten > *,
-.insights > *, .breakdown > *, .row > *,
-section.card > *, .e-reihe > *, .e-wahl > *, main > * { min-width: 0; }
+.insights > *, .breakdown > *, .row > *, .zeile-block > *,
+.konto-zeile > *, section.card > *, .e-reihe > *, .e-wahl > *, main > * { min-width: 0; }
 
 /* Kennzahlen und Erfassungskarten teilen sich dieselbe Rastermechanik. */
 .summary {
@@ -473,9 +504,53 @@ input::placeholder { color: var(--ink-mute); opacity: 0.6; }
   border: none; border-radius: 999px; width: 0.85rem; height: 0.85rem;
   flex: none; padding: 0;
 }
-.tag.rot { background: var(--rot); }
-.tag.gruen { background: var(--gruen); }
-.tag.gelb { background: var(--gelb); }
+
+/* Klassifizierungsfarbe als Fläche — Marke, Legende und Balken teilen sie. */
+.kf-rot { background: var(--kf-rot); }
+.kf-orange { background: var(--kf-orange); }
+.kf-gelb { background: var(--kf-gelb); }
+.kf-gruen { background: var(--kf-gruen); }
+.kf-tuerkis { background: var(--kf-tuerkis); }
+.kf-blau { background: var(--kf-blau); }
+.kf-lila { background: var(--kf-lila); }
+.kf-magenta { background: var(--kf-magenta); }
+
+/* Ein Eintrag mit seiner Kontozeile darunter — die Trennlinie sitzt am
+   Block, nicht an der Zeile, sonst zerschnitte sie zusammengehörendes. */
+.zeile-block { display: grid; }
+.zeile-block + .zeile-block { border-top: 1px dashed var(--line); }
+
+.konto-zeile {
+  display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap;
+  font-size: var(--text-xs); color: var(--ink-mute);
+  padding: 0 0 var(--sp-1) calc(0.85rem + var(--sp-2));
+}
+.zeile-block > .konto-zeile { min-width: 0; }
+.kz-label { flex: none; }
+
+select.konto-wahl {
+  border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--field);
+  color: var(--ink); font-size: var(--text-xs); padding: 0.1rem 0.25rem;
+  max-width: 9rem; min-width: 0;
+}
+select.konto-wahl:focus { border-color: var(--blue); background: var(--card); }
+
+.umbuchung-marke {
+  flex: none; color: var(--gruen); font-weight: 600;
+}
+.umbuchung-marke[hidden] { display: none; }
+
+/* Konten-Kachel: der Saldo wird gerechnet, nicht eingetragen. */
+.konto-saldo {
+  width: var(--amount-w); flex: none; text-align: right;
+  font-variant-numeric: tabular-nums; font-weight: 600; font-size: var(--text-sm);
+}
+.konto-saldo.neg { color: var(--rot); }
+input.konto-aktiv {
+  width: var(--action-w); flex: none; margin: 0;
+  accent-color: var(--blue); cursor: pointer;
+}
+.row.konto-inaktiv .name, .row.konto-inaktiv .konto-saldo { opacity: 0.45; }
 
 .del {
   border: none; background: none; color: var(--ink-mute);
@@ -633,7 +708,8 @@ input::placeholder { color: var(--ink-mute); opacity: 0.6; }
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .brow .bar { flex: 1 1 3rem; height: 6px; border-radius: 3px; background: var(--blue-soft); overflow: hidden; }
-.brow .bar i { display: block; height: 100%; border-radius: 3px; }
+/* Ohne Klassifizierungsklasse gilt der neutrale Akzent. */
+.brow .bar i { display: block; height: 100%; border-radius: 3px; background: var(--blue); }
 .brow .bv {
   flex: none; width: var(--amount-w); text-align: right;
   font-variant-numeric: tabular-nums; font-weight: 600;
@@ -646,9 +722,6 @@ input::placeholder { color: var(--ink-mute); opacity: 0.6; }
 }
 .legend span { display: inline-flex; align-items: center; gap: var(--sp-1); }
 .legend i { width: 0.6rem; height: 0.6rem; border-radius: 999px; display: inline-block; }
-.legend .l-rot i { background: var(--rot); }
-.legend .l-gruen i { background: var(--gruen); }
-.legend .l-gelb i { background: var(--gelb); }
 
 /* ------------------------------------------------------------------ *
  * Privatsicht
@@ -678,7 +751,8 @@ input::placeholder { color: var(--ink-mute); opacity: 0.6; }
   .limit-note,
   .brow .bv,
   .insight,
-  .diagramm
+  .diagramm,
+  .konto-saldo
 ) {
   filter: blur(0.32rem);
   transition: filter 0.1s ease;
@@ -694,6 +768,7 @@ input::placeholder { color: var(--ink-mute); opacity: 0.6; }
 :root[data-privat] .insight:hover,
 :root[data-privat] .diagramm:hover,
 :root[data-privat] .limitrow:hover ~ .limit-note,
+:root[data-privat] .row:hover .konto-saldo,
 :root[data-privat] section.card:hover > header .total {
   filter: none;
 }

@@ -182,12 +182,13 @@ export const ANSICHTEN = ["sankey", "kuchen"];
 
 /**
  * Baut die Grafik für einen Monat.
+ * @param {object} state
  * @param {object} month
  * @param {"sankey"|"kuchen"} ansicht
  * @returns {SVGElement|HTMLElement}
  */
-export function zeichne(month, ansicht) {
-  const daten = flussDaten(month);
+export function zeichne(state, month, ansicht) {
+  const daten = flussDaten(state, month);
   if (daten.leer) {
     return el("p", "hint", "Sobald Einnahmen und Kosten erfasst sind, zeigt sich hier, wohin das Geld fliesst.");
   }
@@ -195,8 +196,8 @@ export function zeichne(month, ansicht) {
 }
 
 /** Dieselben Zahlen als Tabelle — für Vorlesehilfen und zum Nachlesen. */
-export function alsTabelle(month) {
-  const daten = flussDaten(month);
+export function alsTabelle(state, month) {
+  const daten = flussDaten(state, month);
   const tabelle = el("table", "d-tabelle");
 
   const kopf = el("thead");
