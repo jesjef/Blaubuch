@@ -151,6 +151,29 @@ export function baueEinstellungen(aktionen) {
     + "und Rot, Grün und Gelb bleiben den Markierungen vorbehalten.");
   koerper.lastChild.append(farbHinweis);
 
+  /* Klassifizierungen sind Stammdaten und aendern sich selten — sie
+     gehoeren nicht auf das Dashboard. Den Inhalt baut die Oberflaeche,
+     weil nur sie den Zustand kennt; hier steht nur das Fach dafuer. */
+  const klassenBlock = el("section", "e-block");
+  klassenBlock.append(el("h3", null, "Klassifizierungen"));
+  klassenBlock.lastChild.append(hinweis(
+    "Die Wirkung entscheidet die Rechnung, nicht die Farbe: „verloren“ mindert das "
+    + "Vermögen, „erhalten“ verschiebt es nur, „durchlauf“ gehört dir gar nicht. "
+    + "Gelöscht wird nicht — eine stillgelegte Klasse verschwindet aus der Auswahl, "
+    + "bleibt aber an alten Zeilen.",
+    "hinweis-klassen"));
+  const klassenHalter = el("div", "e-klassen");
+  klassenBlock.append(klassenHalter);
+  koerper.append(klassenBlock);
+
+  /* Der Zustand kann sich seit dem letzten Aufbau geaendert haben. */
+  function baueKlassen() {
+    klassenHalter.textContent = "";
+    const inhalt = aktionen.klassenEditor?.();
+    klassenBlock.hidden = !inhalt;
+    if (inhalt) klassenHalter.append(inhalt);
+  }
+
   koerper.append(knopfgruppe("Monat", null, [
     knopf("Bericht kopieren", () => aktionen.bericht(), "btn-report"),
     knopf("Diesen Monat löschen …", () => { dialog.close(); aktionen.monatLoeschen(); })
@@ -201,11 +224,16 @@ export function baueEinstellungen(aktionen) {
 
   return {
     oeffnen(info) {
+      baueKlassen();
       fuss.textContent = info
         ? "Blaubuch " + info.version + " · Daten: " + info.dataPath
         : "";
       dialog.showModal();
     },
+    /* Nach einer Aenderung an den Klassifizierungen: nur dieses Fach neu
+       bauen. Der Dialog bleibt offen — showModal ein zweites Mal waere
+       ein Fehler, und der Benutzer verloere seine Stelle. */
+    aktualisiereKlassen: baueKlassen,
     schliessen: () => dialog.close()
   };
 }

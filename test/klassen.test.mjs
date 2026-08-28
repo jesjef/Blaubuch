@@ -108,3 +108,60 @@ test("jede Farbe der Palette ist eindeutig benannt", () => {
     assert.match(f.dunkel, /^#[0-9A-F]{6}$/, f.key + " dunkel");
   }
 });
+
+/* ------------------------------------------------------------------ *
+ * Selbst angelegte Klassen
+ *
+ * Der Einstellungsdialog laesst eigene Klassen anlegen. Sie muessen den
+ * Weg durch Speichern und Einlesen ueberstehen und dabei nach ihrer
+ * Wirkung rechnen — sonst waere „eigene Klasse" nur ein Etikett.
+ * ------------------------------------------------------------------ */
+
+test("eine selbst angelegte Klasse ueberlebt den Rundlauf und rechnet nach ihrer Wirkung", async () => {
+  const { totals, migrate } = await import("../src/shared/budget.mjs");
+  const { beispielState, KONTO_HAUPT } = await import("./fixtures.mjs");
+
+  const state = beispielState();
+  state.klassen.push({ id: "eigen-1", name: "Steuerrueckstellung", farbe: "tuerkis", wirkung: "erhalten", stillgelegt: false });
+  const monat = state.months["2026-08"];
+  monat.ausgaben.push({
+    id: "z-eigen", name: "Ruecklage", betrag: 300, klasse: "eigen-1",
+    vonKonto: KONTO_HAUPT, nachKonto: null,
+    aktiv: true, faelligAm: 25, laeuftBis: null, notiz: "fuer die Schlussrechnung"
+  });
+
+  /* Rundlauf durch Speichern und Einlesen. */
+  const { state: geladen } = migrate(JSON.parse(JSON.stringify(state)));
+  const eigen = geladen.klassen.find((k) => k.id === "eigen-1");
+  assert.ok(eigen, "die eigene Klasse ist verschwunden");
+  assert.equal(eigen.wirkung, "erhalten");
+  assert.equal(eigen.farbe, "tuerkis");
+
+  const zeile = geladen.months["2026-08"].ausgaben.find((z) => z.name === "Ruecklage");
+  assert.equal(zeile.klasse, "eigen-1", "die Zeile zeigt nicht mehr auf ihre Klasse");
+  assert.equal(zeile.faelligAm, 25, "der Tag im Monat ging verloren");
+  assert.equal(zeile.notiz, "fuer die Schlussrechnung", "die Notiz ging verloren");
+
+  /* „erhalten" heisst: kostet, ist aber nicht weg. */
+  const t = totals(geladen, geladen.months["2026-08"]);
+  assert.equal(t.byKlasse["eigen-1"], 300);
+  assert.ok(t.angelegt >= 300, "die eigene Klasse zaehlt nicht als angelegt");
+});
+
+test("eine stillgelegte Klasse bleibt an alten Zeilen und rechnet weiter", async () => {
+  const { totals } = await import("../src/shared/budget.mjs");
+  const { beispielState, KONTO_HAUPT } = await import("./fixtures.mjs");
+
+  const state = beispielState();
+  state.klassen.push({ id: "alt-1", name: "Altlast", farbe: "magenta", wirkung: "verloren", stillgelegt: true });
+  const monat = state.months["2026-08"];
+  monat.ausgaben.push({
+    id: "z-alt", name: "Nachzahlung", betrag: 120, klasse: "alt-1",
+    vonKonto: KONTO_HAUPT, nachKonto: null,
+    aktiv: true, faelligAm: null, laeuftBis: null, notiz: ""
+  });
+
+  const t = totals(state, monat);
+  assert.equal(t.byKlasse["alt-1"], 120, "stillgelegt heisst nicht ungezaehlt");
+  assert.ok(t.verloren >= 120);
+});

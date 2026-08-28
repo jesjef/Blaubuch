@@ -10,7 +10,8 @@ import {
   SCHEMA_VERSION, EINNAHME_ARTEN, EINNAHME_ART_TITEL,
   formatCHF, parseAmount, monthLabel, isMonthKey, nextMonthKey, sortedMonths,
   totals, buildInsights, buildReport, migrate, monthFromPrevious, uid, nachbarMonat,
-  kontoSaldo, istUmbuchung, STANDARD_KLASSE, WIRKUNG_TITEL, klasseVon
+  kontoSaldo, istUmbuchung, leseFaelligAm,
+  STANDARD_KLASSE, WIRKUNG_TITEL, WIRKUNGEN, klasseVon, FARB_KEYS, farbe
 } from "../shared/budget.mjs";
 import { createSeedState } from "../shared/seed.mjs";
 import { openVault, changePassword, askForeignPassword } from "./lock.mjs";
@@ -307,6 +308,118 @@ function nameField(item, onRename) {
   return wrap;
 }
 
+/**
+ * Kleines Feld fuer die Detailzeile. Bewusst schmal und ohne eigenes
+ * Etikett — die Beschriftung steht davor in der Zeile.
+ */
+function detailFeld({ typ = "text", wert, platzhalter, label, breit, onChange }) {
+  const i = document.createElement("input");
+  i.type = typ;
+  i.className = "detail-feld" + (breit ? " breit" : "");
+  i.autocomplete = "off";
+  i.value = wert ?? "";
+  if (platzhalter) i.placeholder = platzhalter;
+  i.setAttribute("aria-label", label);
+
+  let vorher = null;
+  i.addEventListener("focus", () => { vorher = JSON.stringify(state); });
+  i.addEventListener("change", () => {
+    onChange(i.value);
+    if (vorher && vorher !== JSON.stringify(state)) pushUndo(label, vorher);
+    vorher = null;
+    touch();
+    updateComputed();
+  });
+  return i;
+}
+
+/**
+ * Die Detailzeile: Tag im Monat, Laufzeitende, Notiz und Pause.
+ *
+ * Sie steht eingeklappt hinter „mehr“ — ausgeschrieben braeuchte jede
+ * Zeile vier zusaetzliche Felder, und das Dashboard soll ruhig bleiben.
+ * Was sie schaltet, bleibt trotzdem sichtbar: eine pausierte Zeile ist
+ * gedaempft und traegt ihre Marke, auch wenn die Zeile zugeklappt ist.
+ *
+ * @param {object} opts.mitLaufzeit  Einnahmen kennen kein `laeuftBis`.
+ */
+function detailZeile(item, block, { mitLaufzeit }) {
+  const zeile = el("div", "detail-zeile");
+  zeile.hidden = true;
+
+  zeile.append(el("span", "kz-label", "am"));
+  zeile.append(detailFeld({
+    wert: item.faelligAm ?? "",
+    platzhalter: "Tag",
+    label: item.name + ": Tag im Monat",
+    onChange: (v) => { item.faelligAm = leseFaelligAm(v); }
+  }));
+
+  if (mitLaufzeit) {
+    zeile.append(el("span", "kz-label", "läuft bis"));
+    zeile.append(detailFeld({
+      typ: "month",
+      wert: item.laeuftBis ?? "",
+      label: item.name + ": läuft bis",
+      onChange: (v) => { item.laeuftBis = isMonthKey(v) ? v : null; }
+    }));
+  }
+
+  zeile.append(el("span", "kz-label", "Notiz"));
+  zeile.append(detailFeld({
+    wert: item.notiz ?? "",
+    platzhalter: "Verwendungszweck",
+    label: item.name + ": Notiz",
+    breit: true,
+    onChange: (v) => { item.notiz = v.trim(); }
+  }));
+
+  /* Pausiert: der Betrag bleibt stehen, gerechnet wird er nicht. Eine 0
+     wuerde die Information „normalerweise 500“ verlieren. */
+  const marke = el("span", "pause-marke", "❙❙ pausiert");
+  marke.title = "Betrag bleibt erhalten, zählt diesen Monat aber nicht";
+  const zeigePause = () => {
+    const pausiert = item.aktiv === false;
+    block.classList.toggle("pausiert", pausiert);
+    marke.hidden = !pausiert;
+  };
+
+  const pause = document.createElement("label");
+  pause.className = "pause-wahl";
+  const kaestchen = document.createElement("input");
+  kaestchen.type = "checkbox";
+  kaestchen.checked = item.aktiv === false;
+  kaestchen.setAttribute("aria-label", item.name + " pausieren");
+  kaestchen.addEventListener("change", () => {
+    pushUndo(item.name + (kaestchen.checked ? " pausiert" : " wieder aktiv"));
+    item.aktiv = !kaestchen.checked;
+    zeigePause();
+    announce(item.name + (item.aktiv ? " zählt wieder mit" : " ist pausiert"));
+    touch();
+    updateComputed();
+  });
+  pause.append(kaestchen, document.createTextNode("pausiert"));
+  zeile.append(pause);
+
+  zeigePause();
+  return { zeile, marke };
+}
+
+/** Der Knopf, der die Detailzeile auf- und zuklappt. */
+function detailKnopf(zeile, name) {
+  const k = el("button", "detail-knopf", "mehr");
+  k.type = "button";
+  k.setAttribute("aria-expanded", "false");
+  k.setAttribute("aria-label", "Weitere Angaben zu " + name);
+  k.addEventListener("click", () => {
+    const zeigen = zeile.hidden;
+    zeile.hidden = !zeigen;
+    k.textContent = zeigen ? "weniger" : "mehr";
+    k.setAttribute("aria-expanded", String(zeigen));
+  });
+  return k;
+}
+
 function listRow(item, list, listenName) {
   const block = el("div", "zeile-block");
   const row = el("div", "row");
@@ -338,6 +451,8 @@ function listRow(item, list, listenName) {
     marke.hidden = !ist;
   };
 
+  const details = detailZeile(item, block, { mitLaufzeit: true });
+
   const kontoZeile = el("div", "konto-zeile");
   kontoZeile.append(
     el("span", "kz-label", "von"),
@@ -353,11 +468,13 @@ function listRow(item, list, listenName) {
       onChange: (v) => { item.nachKonto = v; zeigeUmbuchung(); },
       label: item.name + ": nach Konto"
     }),
-    marke
+    marke,
+    details.marke,
+    detailKnopf(details.zeile, item.name)
   );
   zeigeUmbuchung();
 
-  block.append(row, kontoZeile);
+  block.append(row, kontoZeile, details.zeile);
   return block;
 }
 
@@ -755,6 +872,8 @@ function einnahmeRow(e, liste) {
     updateComputed();
   });
 
+  const details = detailZeile(e, block, { mitLaufzeit: false });
+
   const kontoZeile = el("div", "konto-zeile");
   kontoZeile.append(
     el("span", "kz-label", "als"),
@@ -764,10 +883,12 @@ function einnahmeRow(e, liste) {
       wert: e.konto,
       onChange: (v) => { e.konto = v; },
       label: e.name + ": Zielkonto"
-    })
+    }),
+    details.marke,
+    detailKnopf(details.zeile, e.name)
   );
 
-  block.append(row, kontoZeile);
+  block.append(row, kontoZeile, details.zeile);
   return block;
 }
 
@@ -1041,6 +1162,170 @@ function addKarteControl(liste) {
   return wrap;
 }
 
+/* ------------------------------------------------------------------ *
+ * Klassifizierungen — Stammdaten, bearbeitet im Einstellungsdialog
+ * ------------------------------------------------------------------ */
+
+/**
+ * Auswahlfeld fuer den Editor. Baut die Optionen aus Paaren
+ * [wert, beschriftung] und meldet jede Aenderung mit Rueckgaengig.
+ */
+function klassenWahl({ wert, optionen, label, klasse, onChange }) {
+  const s = document.createElement("select");
+  s.className = klasse;
+  s.setAttribute("aria-label", label);
+  for (const [id, name] of optionen) {
+    const o = document.createElement("option");
+    o.value = id;
+    o.textContent = name;
+    o.selected = id === wert;
+    s.append(o);
+  }
+  s.addEventListener("change", () => {
+    pushUndo(label);
+    onChange(s.value);
+    touch();
+    render();
+    einstellungen.aktualisiereKlassen();
+  });
+  return s;
+}
+
+/**
+ * Der Editor fuer die Klassifizierungen.
+ *
+ * Aendert der Benutzer eine Wirkung, aendert sich die Rechnung — deshalb
+ * baut jede Aenderung die Oberflaeche neu auf und legt einen Schritt auf
+ * den Rueckgaengig-Stapel. Geloescht wird nie: alte Zeilen zeigen auf ihre
+ * Klasse, und ein Monat von vorletztem Jahr soll seine Zahlen behalten.
+ */
+function baueKlassenEditor() {
+  if (!state) return null;
+  const halter = el("div", "klassen-liste");
+
+  for (const k of state.klassen) {
+    const zeile = el("div", "klassen-zeile" + (k.stillgelegt ? " stillgelegt" : ""));
+
+    const punkt = el("span", "klassen-punkt kf-" + k.farbe);
+    punkt.setAttribute("aria-hidden", "true");
+    zeile.append(punkt);
+    zeile.append(nameField(k, () => render()));
+
+    zeile.append(klassenWahl({
+      wert: k.farbe,
+      optionen: FARB_KEYS.map((key) => [key, farbe(key).name]),
+      label: k.name + ": Farbe",
+      klasse: "konto-wahl",
+      onChange: (v) => { k.farbe = v; }
+    }));
+
+    zeile.append(klassenWahl({
+      wert: k.wirkung,
+      optionen: WIRKUNGEN.map((w) => [w, WIRKUNG_TITEL[w]]),
+      label: k.name + ": Wirkung",
+      klasse: "konto-wahl",
+      onChange: (v) => { k.wirkung = v; }
+    }));
+
+    /* „In Auswahl“ statt „stillgelegt“: der Haken sagt, was er bewirkt,
+       und steht in derselben Richtung wie das Haekchen bei den Konten. */
+    const wahl = document.createElement("label");
+    wahl.className = "pause-wahl";
+    const kaestchen = document.createElement("input");
+    kaestchen.type = "checkbox";
+    kaestchen.checked = !k.stillgelegt;
+    kaestchen.setAttribute("aria-label", k.name + " zur Auswahl anbieten");
+    kaestchen.addEventListener("change", () => {
+      const uebrig = state.klassen.filter((x) => !x.stillgelegt && x.id !== k.id);
+      if (!kaestchen.checked && uebrig.length === 0) {
+        /* Ohne waehlbare Klasse liesse sich keine Zeile mehr einordnen. */
+        kaestchen.checked = true;
+        const grund = "Die letzte Klassifizierung lässt sich nicht stilllegen — "
+          + "ohne sie liesse sich keine Zeile mehr einordnen.";
+        announce(grund);
+        showNotice(grund, "warn");
+        return;
+      }
+      pushUndo(k.name + (kaestchen.checked ? " wieder in der Auswahl" : " stillgelegt"));
+      k.stillgelegt = !kaestchen.checked;
+      touch();
+      render();
+      einstellungen.aktualisiereKlassen();
+    });
+    wahl.append(kaestchen, document.createTextNode("in Auswahl"));
+    zeile.append(wahl);
+
+    halter.append(zeile);
+  }
+
+  halter.append(addKlasseControl());
+  return halter;
+}
+
+/** Eingabe fuer eine neue Klasse: Name, Farbe und Wirkung. */
+function addKlasseControl() {
+  const wrap = el("div", "add-line");
+  const opener = el("button", "opener", "+ Klassifizierung");
+  opener.type = "button";
+
+  const form = el("form", "add-form");
+  form.hidden = true;
+
+  const nameIn = document.createElement("input");
+  nameIn.type = "text";
+  nameIn.className = "text";
+  nameIn.placeholder = "Bezeichnung";
+  nameIn.setAttribute("aria-label", "Name der Klassifizierung");
+
+  const mach = (optionen, label) => {
+    const s = document.createElement("select");
+    s.className = "konto-wahl";
+    s.setAttribute("aria-label", label);
+    for (const [id, name] of optionen) {
+      const o = document.createElement("option");
+      o.value = id;
+      o.textContent = name;
+      s.append(o);
+    }
+    return s;
+  };
+  const farbIn = mach(FARB_KEYS.map((key) => [key, farbe(key).name]), "Farbe der Klassifizierung");
+  const wirkungIn = mach(WIRKUNGEN.map((w) => [w, WIRKUNG_TITEL[w]]), "Wirkung der Klassifizierung");
+
+  /* Eine Farbe vorschlagen, die noch niemand hat — zwei gleichfarbige
+     Klassen waeren in Legende und Balken nicht auseinanderzuhalten. */
+  const vergeben = new Set(state?.klassen?.map((k) => k.farbe) ?? []);
+  farbIn.value = FARB_KEYS.find((key) => !vergeben.has(key)) ?? FARB_KEYS[0];
+
+  const ok = el("button", "btn-primary", "Hinzufügen");
+  ok.type = "submit";
+  const cancel = el("button", "btn-plain", "Abbrechen");
+  cancel.type = "button";
+
+  form.addEventListener("submit", (ev) => {
+    ev.preventDefault();
+    const name = nameIn.value.trim();
+    if (!name) { nameIn.focus(); return; }
+    pushUndo(name + " (Klassifizierung) hinzugefügt");
+    state.klassen.push({
+      id: uid(), name,
+      farbe: farbIn.value,
+      wirkung: wirkungIn.value,
+      stillgelegt: false
+    });
+    announce(name + " hinzugefügt");
+    touch();
+    render();
+    einstellungen.aktualisiereKlassen();   /* damit die neue Zeile erscheint */
+  });
+  cancel.addEventListener("click", () => { form.hidden = true; opener.hidden = false; });
+  opener.addEventListener("click", () => { form.hidden = false; opener.hidden = true; nameIn.focus(); });
+
+  form.append(nameIn, farbIn, wirkungIn, ok, cancel);
+  wrap.append(opener, form);
+  return wrap;
+}
+
 async function sichereKopie(klartext) {
   const res = await window.blaubuch.exportTo(JSON.stringify(state, null, 2), klartext);
   if (res.ok) {
@@ -1056,6 +1341,7 @@ async function sichereKopie(klartext) {
  * ------------------------------------------------------------------ */
 
 const einstellungen = baueEinstellungen({
+  klassenEditor: () => baueKlassenEditor(),
   bericht: async () => {
     await window.blaubuch.copy(buildReport(state, state.currentMonth));
     announce("Monatsbericht in die Zwischenablage kopiert");
@@ -1207,7 +1493,9 @@ function updateComputed() {
     /* Danach dieselben Kosten nach Klassifizierung geschnitten. Durchlauf
        hat hier nichts verloren: es sind keine Kosten. */
     ...state.klassen
-      .filter((k) => k.wirkung !== "durchlauf")
+      /* Durchlauf sind keine Kosten. Eine stillgelegte Klasse nur zeigen,
+         solange noch Betraege an ihr haengen — sonst waere sie Rauschen. */
+      .filter((k) => k.wirkung !== "durchlauf" && (!k.stillgelegt || (t.byKlasse[k.id] ?? 0) > 0))
       .map((k) => ["· " + k.name, t.byKlasse[k.id] ?? 0, "kf-" + k.farbe]),
     ["Umgebucht (keine Kosten)", t.umgebucht, null]
   ];

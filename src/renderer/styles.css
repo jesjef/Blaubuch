@@ -355,7 +355,7 @@ main {
  */
 .summary > *, .sections > *, .analyse-spalten > *,
 .insights > *, .breakdown > *, .row > *, .zeile-block > *,
-.konto-zeile > *, .seite-fluss > *,
+.konto-zeile > *, .detail-zeile > *, .seite-fluss > *,
 section.card > *, .e-reihe > *, .e-wahl > *, main > * { min-width: 0; }
 
 /* Kennzahlen und Erfassungskarten teilen sich dieselbe Rastermechanik. */
@@ -540,6 +540,65 @@ select.konto-wahl:focus { border-color: var(--blue); background: var(--card); }
   flex: none; color: var(--gruen); font-weight: 600;
 }
 .umbuchung-marke[hidden] { display: none; }
+
+/* Weitere Angaben stehen eingeklappt hinter „mehr“ — ausgeschrieben
+   braeuchte jede Zeile vier Felder mehr, und das Dashboard bleibt ruhig. */
+.detail-knopf {
+  margin-left: auto; flex: none;
+  border: none; background: none; color: var(--blue);
+  font-size: var(--text-xs); font-weight: 600;
+  border-radius: 6px; padding: 0.1rem 0.3rem;
+}
+.detail-knopf:hover { background: var(--blue-soft); }
+
+.detail-zeile {
+  display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap;
+  font-size: var(--text-xs); color: var(--ink-mute);
+  padding: 0 0 var(--sp-2) calc(0.85rem + var(--sp-2));
+}
+.detail-zeile[hidden] { display: none; }
+
+input.detail-feld {
+  border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--field);
+  color: var(--ink); font-size: var(--text-xs); padding: 0.15rem 0.35rem;
+  width: 4.5rem; min-width: 0; flex: none;
+}
+input.detail-feld.breit { width: auto; flex: 1 1 8rem; }
+input.detail-feld:focus { border-color: var(--blue); background: var(--card); }
+
+.pause-wahl {
+  display: inline-flex; align-items: center; gap: var(--sp-1);
+  flex: none; cursor: pointer;
+}
+.pause-wahl input { accent-color: var(--blue); margin: 0; }
+
+/* Pausiert: der Betrag bleibt stehen, gerechnet wird er nicht — das muss
+   man sehen, auch wenn die Detailzeile zugeklappt ist. */
+.pause-marke { flex: none; color: var(--gelb); font-weight: 600; }
+.pause-marke[hidden] { display: none; }
+.zeile-block.pausiert > .row .name-text,
+.zeile-block.pausiert > .row input.amount { opacity: 0.5; }
+.zeile-block.pausiert > .row input.amount { text-decoration: line-through; }
+
+/* ------------------------------------------------------------------ *
+ * Klassifizierungen im Einstellungsdialog
+ * ------------------------------------------------------------------ */
+
+.e-klassen { display: grid; gap: var(--sp-1); }
+.klassen-liste { display: grid; gap: var(--sp-1); }
+.klassen-zeile {
+  display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap;
+  font-size: var(--text-sm); min-height: var(--zeile-h);
+}
+.klassen-zeile + .klassen-zeile { border-top: 1px dashed var(--line); }
+.klassen-zeile > * { min-width: 0; }
+.klassen-zeile .name { flex: 1 1 6rem; min-width: 0; }
+.klassen-punkt {
+  width: 0.7rem; height: 0.7rem; border-radius: 999px; flex: none;
+  display: inline-block;
+}
+/* Stillgelegt heisst: nicht mehr waehlbar, aber weiterhin gerechnet. */
+.klassen-zeile.stillgelegt .name, .klassen-zeile.stillgelegt .klassen-punkt { opacity: 0.45; }
 
 /* Konten-Kachel: der Saldo wird gerechnet, nicht eingetragen. */
 .konto-saldo {
