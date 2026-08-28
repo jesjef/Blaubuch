@@ -36,7 +36,7 @@
   "devDependencies": {
     "@fontsource/instrument-sans": "^5.0.0",
     "@fontsource/sora": "^5.0.0",
-    "electron": "^40.0.0",
+    "electron": "^44.0.0",
     "electron-builder": "^26.0.0"
   },
   "build": {
