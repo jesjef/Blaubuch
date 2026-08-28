@@ -23,6 +23,7 @@ import { zeichne, alsTabelle, ANSICHTEN } from "./diagramm.mjs";
 import { zeichneKontofluss, kontoflussTabelle } from "./kontodiagramm.mjs";
 import { zeichneJahr, jahrTabelle, zeichneLiquiditaet, liquiditaetTabelle } from "./jahrdiagramm.mjs";
 import { jahre, liquiditaet } from "../shared/jahr.mjs";
+import { gruppen } from "../shared/listen.mjs";
 
 const AUTOSAVE_MS = 1200;
 const UNDO_MAX = 50;
@@ -481,6 +482,39 @@ function listRow(item, list, listenName) {
   return block;
 }
 
+/**
+ * Die Zeilen einer Liste in eine Karte haengen — flach oder nach
+ * Klassifizierung gruppiert. Die Untersummen ergeben zusammen genau die
+ * Summe im Kartenkopf; dafuer sorgt `gruppen()` mit denselben Regeln,
+ * nach denen `totals()` rechnet.
+ */
+function fuelleListe(section, d, liste, listenName) {
+  const zeilen = d[liste];
+  if (!gruppiert) {
+    for (const x of zeilen) section.append(listRow(x, zeilen, listenName));
+    return;
+  }
+
+  for (const g of gruppen(state, d, liste)) {
+    const kopf = el("div", "gruppe-kopf");
+    kopf.append(el("i", "gruppe-punkt kf-" + g.farbe), el("span", "gruppe-name", g.name));
+
+    const summe = el("span", "gruppe-summe", formatCHF(g.summe));
+    if (g.ausgenommen > 0) {
+      /* Sonst wundert man sich, warum die Untersumme kleiner ist als das,
+         was in der Gruppe steht. */
+      summe.title = g.ausgenommen === 1
+        ? "Eine Zeile zählt nicht mit (pausiert, Umbuchung oder Durchlauf)"
+        : g.ausgenommen + " Zeilen zählen nicht mit (pausiert, Umbuchung oder Durchlauf)";
+      kopf.append(el("span", "gruppe-hinweis", "· " + g.ausgenommen + " ohne"));
+    }
+    kopf.append(summe);
+    section.append(kopf);
+
+    for (const x of g.zeilen) section.append(listRow(x, zeilen, listenName));
+  }
+}
+
 function addControl(label, list, listenName) {
   const wrap = el("div", "add-line");
   const opener = el("button", "opener", "+ " + label);
@@ -660,7 +694,7 @@ function renderBuchhaltung(d) {
   const da = card("Daueraufträge / LSV", true,
     "Betrag leer oder 0 heisst: läuft diesen Monat nicht und wird nicht abgezogen.");
   refs.totD = da.summe;
-  for (const x of d.dauerauftraege) da.section.append(listRow(x, d.dauerauftraege, "Dauerauftrag"));
+  fuelleListe(da.section, d, "dauerauftraege", "Dauerauftrag");
   da.section.append(addControl("Dauerauftrag", d.dauerauftraege, "Dauerauftrag"));
   raster.append(da.section);
 
@@ -668,7 +702,7 @@ function renderBuchhaltung(d) {
   const fix = card("Fixkosten", true);
   refs.totF = fix.summe;
   if (d.fixkosten.length === 0) fix.section.append(el("p", "hint", "Noch keine Fixkosten erfasst."));
-  for (const x of d.fixkosten) fix.section.append(listRow(x, d.fixkosten, "Fixkosten"));
+  fuelleListe(fix.section, d, "fixkosten", "Fixkosten");
   fix.section.append(addControl("Fixkosten", d.fixkosten, "Fixkosten"));
   raster.append(fix.section);
 
@@ -680,7 +714,7 @@ function renderBuchhaltung(d) {
     "Einmalige Ausgaben dieses Monats — Rechnungen, Anschaffungen, Reparaturen. Wiederkehrendes gehört zu Daueraufträgen oder Fixkosten.");
   refs.totR = re.summe;
   if (d.ausgaben.length === 0) re.section.append(el("p", "hint", "Diesen Monat keine Ausgaben erfasst."));
-  for (const x of d.ausgaben) re.section.append(listRow(x, d.ausgaben, "Ausgabe"));
+  fuelleListe(re.section, d, "ausgaben", "Ausgabe");
   re.section.append(addControl("Ausgabe", d.ausgaben, "Ausgabe"));
   raster.append(re.section);
 
@@ -896,6 +930,15 @@ let seite = (() => {
 })();
 function merkeSeite(wert) {
   try { localStorage.setItem(SEITE_SCHLUESSEL, wert); } catch { /* egal */ }
+}
+
+/* Gruppiert oder flach — eine Frage der Ansicht, nicht der Daten. */
+const GRUPPEN_SCHLUESSEL = "blaubuch-gruppen";
+let gruppiert = (() => {
+  try { return localStorage.getItem(GRUPPEN_SCHLUESSEL) === "1"; } catch { return false; }
+})();
+function merkeGruppen(wert) {
+  try { localStorage.setItem(GRUPPEN_SCHLUESSEL, wert ? "1" : "0"); } catch { /* egal */ }
 }
 
 const ANSICHT_SCHLUESSEL = "blaubuch-fluss-ansicht";
@@ -1500,7 +1543,7 @@ async function kontoZuruecksetzen() {
 
   /* Auch die Ansichtseinstellungen gehoeren zum lokalen Konto. */
   try {
-    for (const k of ["blaubuch-thema", "blaubuch-farbe", "blaubuch-privat", "blaubuch-fluss-ansicht", "blaubuch-seite"]) {
+    for (const k of ["blaubuch-thema", "blaubuch-farbe", "blaubuch-privat", "blaubuch-fluss-ansicht", "blaubuch-seite", "blaubuch-gruppen"]) {
       localStorage.removeItem(k);
     }
   } catch { /* egal */ }
@@ -1735,6 +1778,23 @@ for (const [wert, k] of Object.entries(seitenKnoepfe)) {
   });
 }
 zeigeSeitenwahl();
+
+/* Gruppieren betrifft nur die Erfassungsseite — dort ordnet es die
+   langen Listen nach Klassifizierung und zeigt Untersummen. */
+const gruppenKnopf = $("gruppen");
+function zeigeGruppenwahl() {
+  gruppenKnopf.setAttribute("aria-pressed", String(gruppiert));
+  gruppenKnopf.classList.toggle("an", gruppiert);
+  gruppenKnopf.title = gruppiert ? "Gruppierung aufheben" : "Nach Klassifizierung gruppieren";
+}
+gruppenKnopf.addEventListener("click", () => {
+  gruppiert = !gruppiert;
+  merkeGruppen(gruppiert);
+  zeigeGruppenwahl();
+  render();
+  announce(gruppiert ? "Nach Klassifizierung gruppiert" : "Gruppierung aufgehoben");
+});
+zeigeGruppenwahl();
 
 monthSelect.addEventListener("change", (ev) => gotoMonth(ev.target.value));
 $("prev-month").addEventListener("click", () => stepMonth(-1));

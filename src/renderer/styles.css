@@ -355,7 +355,7 @@ main {
  */
 .summary > *, .sections > *, .analyse-spalten > *,
 .insights > *, .breakdown > *, .row > *, .zeile-block > *,
-.konto-zeile > *, .detail-zeile > *, .seite-fluss > *,
+.konto-zeile > *, .detail-zeile > *, .seite-fluss > *, .gruppe-kopf > *,
 section.card > *, .e-reihe > *, .e-wahl > *, main > * { min-width: 0; }
 
 /* Kennzahlen und Erfassungskarten teilen sich dieselbe Rastermechanik. */
@@ -619,6 +619,34 @@ input.konto-aktiv {
   border-radius: var(--r-sm); padding: 0;
 }
 .del:hover { color: var(--rot); background: var(--rot-soft); }
+
+/* ------------------------------------------------------------------ *
+ * Gruppen in den Listen
+ * ------------------------------------------------------------------ */
+
+/* Die Untersumme ergibt zusammen mit den anderen genau die Summe im
+   Kartenkopf — deshalb steht sie in derselben Flucht wie die Betraege. */
+.gruppe-kopf {
+  display: flex; align-items: center; gap: var(--sp-2);
+  padding: var(--sp-3) 0 var(--sp-1);
+  font-size: var(--text-xs); text-transform: uppercase;
+  letter-spacing: 0.08em; font-weight: 600; color: var(--ink-mute);
+  border-bottom: 1px solid var(--line);
+}
+.gruppe-kopf:first-child { padding-top: 0; }
+.gruppe-punkt {
+  width: 0.55rem; height: 0.55rem; border-radius: 999px; flex: none; display: inline-block;
+}
+.gruppe-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gruppe-hinweis { flex: none; text-transform: none; letter-spacing: 0; opacity: 0.8; }
+.gruppe-summe {
+  margin-left: auto; flex: none;
+  font-variant-numeric: tabular-nums; color: var(--blue-deep);
+}
+/* Nach einer Gruppenzeile beginnt die Liste neu — keine Trennlinie darueber. */
+.gruppe-kopf + .zeile-block { border-top: none; }
+
+button.icon.an { border-color: var(--blue); color: var(--blue); background: var(--blue-soft); }
 
 /* ------------------------------------------------------------------ *
  * Hinzufügen
