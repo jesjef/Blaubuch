@@ -72,6 +72,7 @@
         "AppImage",
         "rpm"
       ],
+      "maintainer": "Jeffrey Jesu <jesjef@users.noreply.github.com>",
       "icon": "build/icon.png",
       "category": "Office"
     },
