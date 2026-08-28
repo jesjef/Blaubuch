@@ -784,6 +784,35 @@ rect.k-inaktiv, text.k-inaktiv { opacity: 0.45; }
 @keyframes ameisenlauf { to { stroke-dashoffset: -14; } }
 
 /* ------------------------------------------------------------------ *
+ * Jahresüberblick und Liquidität
+ * ------------------------------------------------------------------ */
+
+/* Mittel und Kosten teilen einen Massstab, damit sie vergleichbar sind.
+   Die Kostensäule ist nach Wirkung geteilt: unten was weg ist, darüber
+   was nur woanders liegt — dieselbe Zuordnung wie beim Kontofluss. */
+.j-einnahme { fill: var(--serie-quelle); }
+.j-verloren { fill: var(--serie-1); }
+.j-erhalten { fill: var(--serie-rest); }
+.j-achse { stroke: var(--line); stroke-width: 1; }
+
+/* Der Restwert ist eine Differenz, keine dritte Säule — deshalb Linie. */
+.j-rest-linie { fill: none; stroke: var(--ink-mute); stroke-width: 1.5; stroke-dasharray: 4 3; }
+.j-rest-punkt { fill: var(--ink); }
+
+.l-kurve { fill: none; stroke: var(--blue); stroke-width: 2; stroke-linejoin: round; }
+.l-flaeche { fill: var(--blue); opacity: 0.12; }
+.l-null { stroke: var(--rot); stroke-width: 1; stroke-dasharray: 3 3; opacity: 0.7; }
+.l-tief { fill: var(--gelb); }
+.l-tief.negativ { fill: var(--rot); }
+.l-tief-text { font-weight: 600; paint-order: stroke; stroke: var(--card); stroke-width: 3px; }
+
+/* Farbpunkt vor dem Namen in der Jahrestabelle. */
+.tabellen-punkt {
+  display: inline-block; width: 0.55rem; height: 0.55rem;
+  border-radius: 999px; margin-right: var(--sp-2);
+}
+
+/* ------------------------------------------------------------------ *
  * Analyse
  * ------------------------------------------------------------------ */
 

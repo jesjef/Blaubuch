@@ -20,6 +20,8 @@ import { baueEinstellungen } from "./einstellungen.mjs";
 import { starteWaechter } from "./sperre.mjs";
 import { zeichne, alsTabelle, ANSICHTEN } from "./diagramm.mjs";
 import { zeichneKontofluss, kontoflussTabelle } from "./kontodiagramm.mjs";
+import { zeichneJahr, jahrTabelle, zeichneLiquiditaet, liquiditaetTabelle } from "./jahrdiagramm.mjs";
+import { jahre, liquiditaet } from "../shared/jahr.mjs";
 
 const AUTOSAVE_MS = 1200;
 const UNDO_MAX = 50;
@@ -714,31 +716,105 @@ function renderFluss(d) {
   halter.append(an.section);
 
   /* Kontofluss */
-  const kf = card("Kontofluss", false,
-    "Jede Linie ist Geld in Bewegung: von den Einnahmen auf deine Konten, "
-    + "zwischen den Konten, und hinaus als Ausgabe. Konten und Beträge "
-    + "pflegst du auf der Seite Buchhaltung.");
+  halter.append(diagrammKarte({
+    titel: "Kontofluss",
+    beschreibung: "Jede Linie ist Geld in Bewegung: von den Einnahmen auf deine Konten, "
+      + "zwischen den Konten, und hinaus als Ausgabe. Konten und Beträge "
+      + "pflegst du auf der Seite Buchhaltung.",
+    zeichnen: () => zeichneKontofluss(state, d),
+    tabelle: () => kontoflussTabelle(state, d)
+  }).section);
+
+  /* Liquidität im Monat */
+  const v = liquiditaet(state, d);
+  const liq = diagrammKarte({
+    titel: "Liquidität im Monat",
+    beschreibung: "Der Stand über die Tage. Er beantwortet, was eine Monatssumme nicht "
+      + "kann: reicht das Geld auch zwischendurch, wenn der Dauerauftrag vor dem Lohn läuft? "
+      + "Umbuchungen bewegen die Kurve nicht — das Geld hat dein Vermögen nicht verlassen.",
+    zeichnen: () => zeichneLiquiditaet(state, d),
+    tabelle: () => liquiditaetTabelle(state, d)
+  });
+  /* Ehrlich sagen, worauf die Kurve beruht: undatiertes Geld kann sie
+     nicht einordnen und rechnet es zum Monatsanfang. */
+  if (v.ohneTag > 0) {
+    liq.section.insertBefore(
+      el("p", "hint", v.ohneTag === 1
+        ? "Eine Zeile hat keinen Tag und zählt zum Monatsanfang. Trage unter „mehr“ einen Tag ein, damit die Kurve stimmt."
+        : v.ohneTag + " Zeilen haben keinen Tag und zählen zum Monatsanfang. Trage sie unter „mehr“ ein, damit die Kurve stimmt."),
+      liq.buehne
+    );
+  }
+  halter.append(liq.section);
+
+  /* Jahresüberblick */
+  const jahrListe = jahre(state);
+  if (jahrListe.length > 0) {
+    if (!jahrListe.includes(gewaehltesJahr)) {
+      gewaehltesJahr = state.currentMonth.slice(0, 4);
+      if (!jahrListe.includes(gewaehltesJahr)) gewaehltesJahr = jahrListe[jahrListe.length - 1];
+    }
+
+    const wahl = document.createElement("select");
+    wahl.className = "konto-wahl";
+    wahl.setAttribute("aria-label", "Jahr wählen");
+    for (const j of jahrListe) {
+      const o = document.createElement("option");
+      o.value = j;
+      o.textContent = j;
+      o.selected = j === gewaehltesJahr;
+      wahl.append(o);
+    }
+    wahl.addEventListener("change", () => {
+      gewaehltesJahr = wahl.value;
+      render();
+      announce("Jahr " + gewaehltesJahr);
+    });
+
+    halter.append(diagrammKarte({
+      titel: "Jahresüberblick",
+      beschreibung: "Je Monat die verfügbaren Mittel gegen die Kosten, die Kosten nach "
+        + "Wirkung geteilt: unten, was weg ist, darüber, was nur woanders liegt. "
+        + "Die Linie ist der Restwert.",
+      zeichnen: () => zeichneJahr(state, gewaehltesJahr),
+      tabelle: () => jahrTabelle(state, gewaehltesJahr),
+      kopfZusatz: wahl
+    }).section);
+  }
+}
+
+/* Welches Jahr der Ueberblick zeigt. Wie die Seitenwahl eine Frage des
+   Fensters und nicht der Daten — sie muss keinen Neustart ueberleben. */
+let gewaehltesJahr = null;
+
+/**
+ * Karte mit einer Grafik und dem Knopf, der dieselben Zahlen als Tabelle
+ * nachliefert. Die Grafik allein ist keine zugaengliche Quelle — deshalb
+ * gibt es den Knopf ueberall, wo gezeichnet wird.
+ */
+function diagrammKarte({ titel, beschreibung, zeichnen, tabelle, kopfZusatz }) {
+  const box = card(titel, false, beschreibung);
+  if (kopfZusatz) box.section.querySelector("header").append(kopfZusatz);
 
   const buehne = el("div", "kontofluss-buehne");
-  buehne.append(zeichneKontofluss(state, d));
-  const tabelle = el("div", "d-tabelle-huelle");
-  tabelle.hidden = true;
-  kf.section.append(buehne, tabelle);
+  buehne.append(zeichnen());
+  const huelle = el("div", "d-tabelle-huelle");
+  huelle.hidden = true;
+  box.section.append(buehne, huelle);
 
-  /* Zahlen zum Nachlesen — die Grafik allein ist keine zugängliche Quelle. */
   const zahlen = el("button", "d-tabelle-knopf", "Zahlen anzeigen");
   zahlen.type = "button";
   zahlen.setAttribute("aria-expanded", "false");
   zahlen.addEventListener("click", () => {
-    const zeigen = tabelle.hidden;
-    if (zeigen && !tabelle.firstChild) tabelle.append(kontoflussTabelle(state, d));
-    tabelle.hidden = !zeigen;
+    const zeigen = huelle.hidden;
+    if (zeigen) { huelle.textContent = ""; huelle.append(tabelle()); }
+    huelle.hidden = !zeigen;
     zahlen.textContent = zeigen ? "Zahlen ausblenden" : "Zahlen anzeigen";
     zahlen.setAttribute("aria-expanded", String(zeigen));
   });
-  kf.section.append(zahlen);
+  box.section.append(zahlen);
 
-  halter.append(kf.section);
+  return { section: box.section, buehne, huelle };
 }
 
 /**
