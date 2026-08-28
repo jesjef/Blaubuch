@@ -355,7 +355,8 @@ main {
  */
 .summary > *, .sections > *, .analyse-spalten > *,
 .insights > *, .breakdown > *, .row > *, .zeile-block > *,
-.konto-zeile > *, section.card > *, .e-reihe > *, .e-wahl > *, main > * { min-width: 0; }
+.konto-zeile > *, .seite-fluss > *,
+section.card > *, .e-reihe > *, .e-wahl > *, main > * { min-width: 0; }
 
 /* Kennzahlen und Erfassungskarten teilen sich dieselbe Rastermechanik. */
 .summary {
@@ -605,6 +606,10 @@ input.konto-aktiv {
   margin-left: auto; display: flex; gap: 2px;
   border: 1px solid var(--line); border-radius: var(--r-sm); padding: 2px;
 }
+/* In der Kopfleiste sitzt der Seitenwechsel neben der Wortmarke —
+   das `margin-left: auto` gehoert der Geldfluss-Karte. */
+.umschalter.seiten { margin-left: 0; }
+.umschalter.seiten .umschalt-knopf { font-size: var(--text-sm); padding: 0.3rem 0.7rem; }
 .umschalt-knopf {
   border: none; background: none; color: var(--ink-mute);
   border-radius: 6px; padding: 0.2rem 0.55rem;
@@ -679,6 +684,12 @@ input.konto-aktiv {
   color: var(--ink-mute); text-transform: uppercase;
   letter-spacing: 0.08em; font-size: 0.66rem; padding-top: var(--sp-2);
 }
+
+/* ------------------------------------------------------------------ *
+ * Fluss-Seite: Analyse oben, Kontofluss darunter, beide volle Breite
+ * ------------------------------------------------------------------ */
+
+.seite-fluss { display: grid; gap: var(--sp-4); }
 
 /* ------------------------------------------------------------------ *
  * Analyse

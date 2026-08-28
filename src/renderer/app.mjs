@@ -457,6 +457,11 @@ function render() {
   const d = currentMonth();
   appEl.textContent = "";
 
+  /* Beim Neuaufbau zeigen alte refs auf tote Knoten. updateComputed darf
+     nur beschreiben, was die aktuelle Seite tatsaechlich zeigt — deshalb
+     wird hier geleert und dort je Block einzeln geprueft. */
+  for (const k of Object.keys(refs)) delete refs[k];
+
   /* Monatsauswahl */
   monthSelect.textContent = "";
   const keys = sortedMonths(state);
@@ -482,6 +487,14 @@ function render() {
     appEl.append(n);
   }
 
+  if (seite === "fluss") renderFluss(d);
+  else renderBuchhaltung(d);
+
+  updateComputed();
+}
+
+/** Die Erfassungsseite — Kennzahlen und alle Karten zum Eintragen. */
+function renderBuchhaltung(d) {
   /* Kennzahlen */
   const summary = el("div", "summary");
   const s1 = el("div", "stat");
@@ -552,10 +565,18 @@ function render() {
 
   /* Geldfluss — füllt den freien Platz im Raster. */
   raster.append(buildFluss(d));
+}
 
-  /* Analyse — über die volle Breite unter den Erfassungskarten. */
+/**
+ * Die Auswertungsseite: oben die Analyse, darunter der Kontofluss.
+ * Erfasst wird hier nichts — Konten und Beträge pflegt die Buchhaltung.
+ */
+function renderFluss(d) {
+  const halter = el("div", "seite-fluss");
+  appEl.append(halter);
+
+  /* Analyse */
   const an = card("Analyse", false);
-  an.section.classList.add("wide");
   refs.insights = el("div", "insights");
   refs.breakdown = el("div", "breakdown");
 
@@ -572,9 +593,7 @@ function render() {
     legende.append(sp);
   }
   an.section.append(legende);
-  appEl.append(an.section);
-
-  updateComputed();
+  halter.append(an.section);
 }
 
 /**
@@ -638,6 +657,23 @@ function buildFluss(d) {
 
   zeichneNeu();
   return box.section;
+}
+
+/**
+ * Welche Seite offen ist: Buchhaltung (erfassen) oder Fluss (auswerten).
+ * Wie die Diagrammansicht eine Sache des Fensters, nicht der Daten —
+ * darum Browserspeicher statt Tresor.
+ */
+const SEITEN = ["buchhaltung", "fluss"];
+const SEITE_SCHLUESSEL = "blaubuch-seite";
+let seite = (() => {
+  try {
+    const w = localStorage.getItem(SEITE_SCHLUESSEL);
+    return SEITEN.includes(w) ? w : "buchhaltung";
+  } catch { return "buchhaltung"; }
+})();
+function merkeSeite(wert) {
+  try { localStorage.setItem(SEITE_SCHLUESSEL, wert); } catch { /* egal */ }
 }
 
 const ANSICHT_SCHLUESSEL = "blaubuch-fluss-ansicht";
@@ -1061,7 +1097,7 @@ async function kontoZuruecksetzen() {
 
   /* Auch die Ansichtseinstellungen gehoeren zum lokalen Konto. */
   try {
-    for (const k of ["blaubuch-thema", "blaubuch-farbe", "blaubuch-privat", "blaubuch-fluss-ansicht"]) {
+    for (const k of ["blaubuch-thema", "blaubuch-farbe", "blaubuch-privat", "blaubuch-fluss-ansicht", "blaubuch-seite"]) {
       localStorage.removeItem(k);
     }
   } catch { /* egal */ }
@@ -1078,43 +1114,49 @@ async function kontoZuruecksetzen() {
  * ------------------------------------------------------------------ */
 
 function updateComputed() {
-  if (!refs.v1) return;
+  if (!state) return;
   const d = currentMonth();
   const t = totals(state, d);
 
-  refs.v1.textContent = formatCHF(t.einnahmen);
-  refs.sub1.textContent = "Erwerbseinkommen " + formatCHF(t.erwerb);
-  refs.v2.textContent = formatCHF(t.kosten);
-  refs.sub2.textContent = "Daueraufträge " + formatCHF(t.da) + " · Übrige " + formatCHF(t.kosten - t.da);
-  refs.v3.textContent = formatCHF(t.rest);
-  refs.sub3.textContent = t.rest < 0 ? "Monat im Minus" : "verfügbar nach allen Abzügen";
-  refs.box3.className = "stat " + (t.rest < 0 ? "neg" : "pos");
+  /* Kennzahlen und Kartensummen gibt es nur auf der Buchhaltungsseite —
+     nach einem Seitenwechsel zeigen diese refs sonst ins Leere. */
+  if (refs.v1) {
+    refs.v1.textContent = formatCHF(t.einnahmen);
+    refs.sub1.textContent = "Erwerbseinkommen " + formatCHF(t.erwerb);
+    refs.v2.textContent = formatCHF(t.kosten);
+    refs.sub2.textContent = "Daueraufträge " + formatCHF(t.da) + " · Übrige " + formatCHF(t.kosten - t.da);
+    refs.v3.textContent = formatCHF(t.rest);
+    refs.sub3.textContent = t.rest < 0 ? "Monat im Minus" : "verfügbar nach allen Abzügen";
+    refs.box3.className = "stat " + (t.rest < 0 ? "neg" : "pos");
 
-  refs.totE.textContent = formatCHF(t.einnahmen);
-  refs.totD.textContent = formatCHF(t.da);
-  refs.totF.textContent = formatCHF(t.fix);
-  refs.totK.textContent = formatCHF(t.kk);
-  refs.totR.textContent = formatCHF(t.re);
+    refs.totE.textContent = formatCHF(t.einnahmen);
+    refs.totD.textContent = formatCHF(t.da);
+    refs.totF.textContent = formatCHF(t.fix);
+    refs.totK.textContent = formatCHF(t.kk);
+    refs.totR.textContent = formatCHF(t.re);
 
-  for (const ks of refs.kontoSalden ?? []) {
-    const saldo = kontoSaldo(state, d, ks.kontoId);
-    ks.elem.textContent = formatCHF(saldo);
-    ks.elem.classList.toggle("neg", saldo < 0);
+    for (const ks of refs.kontoSalden ?? []) {
+      const saldo = kontoSaldo(state, d, ks.kontoId);
+      ks.elem.textContent = formatCHF(saldo);
+      ks.elem.classList.toggle("neg", saldo < 0);
+    }
+
+    for (const c of refs.cards ?? []) {
+      const wert = parseAmount(c.karte.betrag);
+      const limit = parseAmount(c.karte.limit);
+      const drueber = limit > 0 && wert > limit;
+      c.fuellung.style.width = (limit > 0 ? Math.min(100, (wert / limit) * 100) : 0) + "%";
+      c.bar.className = "limitbar" + (drueber ? " over" : "") + (limit > 0 ? "" : " leer");
+      c.note.className = "limit-note" + (drueber ? " over" : "");
+      c.note.textContent = limit <= 0
+        ? "Kein Limit gesetzt"
+        : drueber
+          ? "Limit " + formatCHF(limit) + " um " + formatCHF(wert - limit) + " überschritten"
+          : formatCHF(wert) + " von Limit " + formatCHF(limit);
+    }
   }
 
-  for (const c of refs.cards) {
-    const wert = parseAmount(c.karte.betrag);
-    const limit = parseAmount(c.karte.limit);
-    const drueber = limit > 0 && wert > limit;
-    c.fuellung.style.width = (limit > 0 ? Math.min(100, (wert / limit) * 100) : 0) + "%";
-    c.bar.className = "limitbar" + (drueber ? " over" : "") + (limit > 0 ? "" : " leer");
-    c.note.className = "limit-note" + (drueber ? " over" : "");
-    c.note.textContent = limit <= 0
-      ? "Kein Limit gesetzt"
-      : drueber
-        ? "Limit " + formatCHF(limit) + " um " + formatCHF(wert - limit) + " überschritten"
-        : formatCHF(wert) + " von Limit " + formatCHF(limit);
-  }
+  if (!refs.insights) return;
 
   refs.insights.textContent = "";
   for (const ins of buildInsights(state, state.currentMonth)) {
@@ -1267,6 +1309,27 @@ async function importieren() {
 const aktualisiereThemaKnopf = verbindeSchalter($("thema"));
 verbindePrivatSchalter($("privat"));
 $("einstellungen").addEventListener("click", () => einstellungen.oeffnen(appInfo));
+
+/* Seitenumschalter in der Kopfleiste. */
+const seitenKnoepfe = { buchhaltung: $("seite-buchhaltung"), fluss: $("seite-fluss") };
+function zeigeSeitenwahl() {
+  for (const [wert, k] of Object.entries(seitenKnoepfe)) {
+    const aktiv = wert === seite;
+    k.classList.toggle("aktiv", aktiv);
+    k.setAttribute("aria-pressed", String(aktiv));
+  }
+}
+for (const [wert, k] of Object.entries(seitenKnoepfe)) {
+  k.addEventListener("click", () => {
+    if (seite === wert) return;
+    seite = wert;
+    merkeSeite(wert);
+    zeigeSeitenwahl();
+    render();
+    announce("Seite: " + k.textContent);
+  });
+}
+zeigeSeitenwahl();
 
 monthSelect.addEventListener("change", (ev) => gotoMonth(ev.target.value));
 $("prev-month").addEventListener("click", () => stepMonth(-1));
