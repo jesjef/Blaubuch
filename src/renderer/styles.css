@@ -692,6 +692,39 @@ input.konto-aktiv {
 .seite-fluss { display: grid; gap: var(--sp-4); }
 
 /* ------------------------------------------------------------------ *
+ * Kontofluss
+ * ------------------------------------------------------------------ */
+
+.kontofluss-buehne { margin-top: var(--sp-2); min-height: 14rem; }
+/* Das Seitenverhältnis kommt aus der viewBox — die Höhe folgt der Breite. */
+.diagramm.kontofluss { height: auto; }
+
+.k-knoten { fill: var(--card); stroke: var(--line); }
+/* Quelle und Senke tragen die Kantenfarbe als Rahmen — die Fläche bleibt
+   Karte, damit die Beschriftung ihren Kontrast behält. */
+.k-knoten.k-quelle { stroke: var(--serie-quelle); stroke-width: 2; }
+.k-knoten.k-senke { stroke: var(--serie-1); stroke-width: 2; }
+rect.k-inaktiv, text.k-inaktiv { opacity: 0.45; }
+
+.kante { fill: none; stroke-linecap: round; opacity: 0.75; }
+.kante.k-einnahme { stroke: var(--serie-quelle); }
+.kante.k-umbuchung { stroke: var(--serie-rest); }   /* Grün: das Geld bleibt im Vermögen. */
+.kante.k-ausgabe { stroke: var(--serie-1); }
+
+/* Beträge bleiben lesbar, wo sie eine Linie kreuzen: die Karte legt
+   sich als schmaler Rand hinter die Ziffern. */
+.kante-wert { paint-order: stroke; stroke: var(--card); stroke-width: 3px; }
+
+/* Ameisenlinie: Muster 6+8 = 14, ein Umlauf je −14 ist nahtlos und
+   läuft in Flussrichtung. Ohne Animationswunsch bleibt die Strichelung
+   stehen — die Richtung erzählt der Pfad auch im Stillstand. */
+.kante.ameise { stroke-dasharray: 6 8; }
+@media (prefers-reduced-motion: no-preference) {
+  .kante.ameise { animation: ameisenlauf 1.1s linear infinite; }
+}
+@keyframes ameisenlauf { to { stroke-dashoffset: -14; } }
+
+/* ------------------------------------------------------------------ *
  * Analyse
  * ------------------------------------------------------------------ */
 

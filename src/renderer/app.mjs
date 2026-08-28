@@ -18,6 +18,7 @@ import { verbindeSchalter, verbindePrivatSchalter } from "./thema.mjs";
 import { baueEinstellungen } from "./einstellungen.mjs";
 import { starteWaechter } from "./sperre.mjs";
 import { zeichne, alsTabelle, ANSICHTEN } from "./diagramm.mjs";
+import { zeichneKontofluss, kontoflussTabelle } from "./kontodiagramm.mjs";
 
 const AUTOSAVE_MS = 1200;
 const UNDO_MAX = 50;
@@ -594,6 +595,33 @@ function renderFluss(d) {
   }
   an.section.append(legende);
   halter.append(an.section);
+
+  /* Kontofluss */
+  const kf = card("Kontofluss", false,
+    "Jede Linie ist Geld in Bewegung: von den Einnahmen auf deine Konten, "
+    + "zwischen den Konten, und hinaus als Ausgabe. Konten und Beträge "
+    + "pflegst du auf der Seite Buchhaltung.");
+
+  const buehne = el("div", "kontofluss-buehne");
+  buehne.append(zeichneKontofluss(state, d));
+  const tabelle = el("div", "d-tabelle-huelle");
+  tabelle.hidden = true;
+  kf.section.append(buehne, tabelle);
+
+  /* Zahlen zum Nachlesen — die Grafik allein ist keine zugängliche Quelle. */
+  const zahlen = el("button", "d-tabelle-knopf", "Zahlen anzeigen");
+  zahlen.type = "button";
+  zahlen.setAttribute("aria-expanded", "false");
+  zahlen.addEventListener("click", () => {
+    const zeigen = tabelle.hidden;
+    if (zeigen && !tabelle.firstChild) tabelle.append(kontoflussTabelle(state, d));
+    tabelle.hidden = !zeigen;
+    zahlen.textContent = zeigen ? "Zahlen ausblenden" : "Zahlen anzeigen";
+    zahlen.setAttribute("aria-expanded", String(zeigen));
+  });
+  kf.section.append(zahlen);
+
+  halter.append(kf.section);
 }
 
 /**
