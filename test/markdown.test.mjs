@@ -45,7 +45,7 @@ test("Konten stehen mit ihrem gerechneten Saldo da", () => {
 test("eine Umbuchung wird als solche ausgewiesen und nicht als Kosten", () => {
   const state = beispielState();
   state.konten.push({ id: "k-spar", name: "Sparkonto", institut: "", aktiv: true });
-  state.months["2026-08"].dauerauftraege.push({
+  state.months["2026-08"].fixkosten.push({
     id: "z1", name: "Sparen", betrag: 400, klasse: "sparen",
     vonKonto: KONTO_HAUPT, nachKonto: "k-spar",
     aktiv: true, faelligAm: null, laeuftBis: null, notiz: ""
@@ -58,10 +58,10 @@ test("eine Umbuchung wird als solche ausgewiesen und nicht als Kosten", () => {
 
 test("Tag, Notiz und Pause wandern mit, wenn sie gesetzt sind", () => {
   const state = beispielState();
-  const zeile = state.months["2026-08"].dauerauftraege[0];
+  const zeile = state.months["2026-08"].fixkosten[0];
   zeile.faelligAm = 25;
   zeile.notiz = "Verwendungszweck";
-  state.months["2026-08"].fixkosten[0].aktiv = false;
+  state.months["2026-08"].fixkosten[2].aktiv = false;
 
   const md = buildMarkdown(state);
   assert.match(md, /25\./);

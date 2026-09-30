@@ -690,18 +690,12 @@ function renderBuchhaltung(d) {
   ein.section.append(addEinnahmeControl(d.einnahmen));
   raster.append(ein.section);
 
-  /* Daueraufträge */
-  const da = card("Daueraufträge / LSV", true,
-    "Betrag leer oder 0 heisst: läuft diesen Monat nicht und wird nicht abgezogen.");
-  refs.totD = da.summe;
-  fuelleListe(da.section, d, "dauerauftraege", "Dauerauftrag");
-  da.section.append(addControl("Dauerauftrag", d.dauerauftraege, "Dauerauftrag"));
-  raster.append(da.section);
-
-  /* Fixkosten */
-  const fix = card("Fixkosten", true);
+  /* Fixkosten, Daueraufträge und LSV — alles, was jeden Monat wiederkommt */
+  const fix = card("Fixkosten & Daueraufträge", true,
+    "Alles, was jeden Monat wiederkommt: Daueraufträge, LSV, Rechnungen mit festem Betrag. "
+    + "Betrag leer oder 0 heisst: läuft diesen Monat nicht und wird nicht abgezogen.");
   refs.totF = fix.summe;
-  if (d.fixkosten.length === 0) fix.section.append(el("p", "hint", "Noch keine Fixkosten erfasst."));
+  if (d.fixkosten.length === 0) fix.section.append(el("p", "hint", "Noch keine Fixkosten oder Daueraufträge erfasst."));
   fuelleListe(fix.section, d, "fixkosten", "Fixkosten");
   fix.section.append(addControl("Fixkosten", d.fixkosten, "Fixkosten"));
   raster.append(fix.section);
@@ -711,7 +705,7 @@ function renderBuchhaltung(d) {
 
   /* Ausgaben */
   const re = card("Ausgaben", true,
-    "Einmalige Ausgaben dieses Monats — Rechnungen, Anschaffungen, Reparaturen. Wiederkehrendes gehört zu Daueraufträgen oder Fixkosten.");
+    "Einmalige Ausgaben dieses Monats — Rechnungen, Anschaffungen, Reparaturen. Wiederkehrendes gehört zu den Fixkosten & Daueraufträgen.");
   refs.totR = re.summe;
   if (d.ausgaben.length === 0) re.section.append(el("p", "hint", "Diesen Monat keine Ausgaben erfasst."));
   fuelleListe(re.section, d, "ausgaben", "Ausgabe");
@@ -1570,13 +1564,12 @@ function updateComputed() {
     refs.v1.textContent = formatCHF(t.einnahmen);
     refs.sub1.textContent = "Erwerbseinkommen " + formatCHF(t.erwerb);
     refs.v2.textContent = formatCHF(t.kosten);
-    refs.sub2.textContent = "Daueraufträge " + formatCHF(t.da) + " · Übrige " + formatCHF(t.kosten - t.da);
+    refs.sub2.textContent = "Fixkosten " + formatCHF(t.fix) + " · Übrige " + formatCHF(t.kosten - t.fix);
     refs.v3.textContent = formatCHF(t.rest);
     refs.sub3.textContent = t.rest < 0 ? "Monat im Minus" : "verfügbar nach allen Abzügen";
     refs.box3.className = "stat " + (t.rest < 0 ? "neg" : "pos");
 
     refs.totE.textContent = formatCHF(t.einnahmen);
-    refs.totD.textContent = formatCHF(t.da);
     refs.totF.textContent = formatCHF(t.fix);
     refs.totK.textContent = formatCHF(t.kk);
     refs.totR.textContent = formatCHF(t.re);
@@ -1618,7 +1611,6 @@ function updateComputed() {
 
   refs.breakdown.textContent = "";
   const bloecke = [
-    ["Daueraufträge", t.da, null],
     ["Fixkosten", t.fix, null],
     ["Kreditkarten", t.kk, null],
     ["Ausgaben", t.re, null],
@@ -1675,7 +1667,7 @@ function anlegen(key) {
   state.currentMonth = key;
   touch();
   render();
-  showNotice("Monat angelegt. Daueraufträge und Fixkosten wurden übernommen — was diesmal nicht läuft, einfach auf 0 setzen.");
+  showNotice("Monat angelegt. Fixkosten und Daueraufträge wurden übernommen — was diesmal nicht läuft, einfach auf 0 setzen.");
 }
 
 async function monatLoeschen() {

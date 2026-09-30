@@ -66,8 +66,8 @@ test("totals rechnet einen Beispielmonat korrekt", () => {
   assert.equal(t.erwerb, 5200, "Netto plus Spesen");
   assert.equal(t.bestand, 400, "Konto plus Bar");
   assert.equal(t.einnahmen, 5600);
-  assert.equal(t.da, 1800);
-  assert.equal(t.fix, 250);
+  assert.equal(t.fix, 2050, "Fixkosten und Dauerauftraege in einer Summe");
+  assert.equal(t.da, undefined, "eine eigene Dauerauftragssumme gibt es nicht mehr");
   assert.equal(t.kk, 500);
   assert.equal(t.re, 250);
   assert.equal(t.kosten, 2800);
@@ -178,12 +178,13 @@ test("migrate repariert eine kaputte Datei, statt zu scheitern", () => {
   assert.equal(m.kreditkarten.length, 1, "namenlose Kartenzeilen fliegen raus");
   assert.equal(m.kreditkarten[0].betrag, 0, "unlesbarer Betrag wird zu 0");
   assert.equal(m.kreditkarten[0].limit, 1000, "das Limit wird gelesen");
-  assert.equal(m.dauerauftraege.length, 1, "namenlose und leere Zeilen werden verworfen");
-  assert.equal(m.dauerauftraege[0].klasse, "ausgaben",
+  assert.equal(m.fixkosten.length, 1, "namenlose und leere Zeilen werden verworfen");
+  assert.equal(m.fixkosten[0].klasse, "ausgaben",
     "eine unbekannte Markierung gilt als ausgegeben — die vorsichtigere Annahme");
-  assert.ok(m.dauerauftraege[0].vonKonto, "und bekommt ein Herkunftskonto");
-  assert.ok(m.dauerauftraege[0].id, "fehlende id wird vergeben");
-  assert.ok(Array.isArray(m.fixkosten), "fehlende Listen werden angelegt");
+  assert.ok(m.fixkosten[0].vonKonto, "und bekommt ein Herkunftskonto");
+  assert.ok(m.fixkosten[0].id, "fehlende id wird vergeben");
+  assert.ok(Array.isArray(m.ausgaben), "fehlende Listen werden angelegt");
+  assert.equal(m.dauerauftraege, undefined, "die alte Liste lebt nicht weiter");
   assert.ok(repariert.length >= 2, "Reparaturen werden gemeldet");
 });
 
@@ -289,14 +290,13 @@ test("neuer Monat uebernimmt Wiederkehrendes, aber nichts Einmaliges", () => {
   const summe = stamm.konten.reduce((s, k) => s + anfangsbestand(neu, k.id), 0);
   assert.equal(summe, totals(stamm, vorlage).rest,
     "die Summe der Kontosalden ist der Restwert — sonst ist eine Buchung verlorengegangen");
-  assert.equal(neu.dauerauftraege.length, 2, "Auftraege kommen mit");
-  assert.equal(neu.fixkosten.length, 2);
+  assert.equal(neu.fixkosten.length, 4, "Fixkosten und Auftraege kommen mit");
   assert.deepEqual(neu.ausgaben, [], "Ausgaben sind einmalig");
   assert.equal(neu.kreditkarten.length, 2, "die Karten selbst bleiben bestehen");
   assert.ok(neu.kreditkarten.every((k) => k.betrag === 0), "aber jeder Saldo faengt bei 0 an");
 
-  const alteIds = vorlage.dauerauftraege.map((x) => x.id);
-  assert.ok(neu.dauerauftraege.every((x) => !alteIds.includes(x.id)), "jede Zeile bekommt eine eigene id");
+  const alteIds = vorlage.fixkosten.map((x) => x.id);
+  assert.ok(neu.fixkosten.every((x) => !alteIds.includes(x.id)), "jede Zeile bekommt eine eigene id");
 });
 
 test("monthFromPrevious kommt auch ohne Vorlage klar", () => {
@@ -400,8 +400,7 @@ test("eine frische Installation startet leer", () => {
   assert.equal(state.version, SCHEMA_VERSION);
 
   const m = state.months["2026-08"];
-  assert.deepEqual(m.dauerauftraege, [], "keine vorgegebenen Auftraege");
-  assert.deepEqual(m.fixkosten, [], "keine vorgegebenen Fixkosten");
+  assert.deepEqual(m.fixkosten, [], "keine vorgegebenen Fixkosten oder Auftraege");
   assert.deepEqual(m.ausgaben, []);
   assert.equal(totals(stamm, m).einnahmen, 0);
   assert.deepEqual(m.kreditkarten, [], "keine vorgegebenen Karten");
@@ -421,7 +420,7 @@ test("der Startzustand enthaelt weder Namen noch Betraege", () => {
   const namen = [];
   const betraege = [];
   for (const monat of Object.values(state.months)) {
-    for (const liste of [monat.dauerauftraege, monat.fixkosten, monat.ausgaben]) {
+    for (const liste of [monat.fixkosten, monat.ausgaben]) {
       for (const zeile of liste) { namen.push(zeile.name); betraege.push(zeile.betrag); }
     }
     for (const k of monat.kreditkarten) { namen.push(k.name); betraege.push(k.betrag, k.limit); }

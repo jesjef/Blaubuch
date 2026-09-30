@@ -105,7 +105,7 @@ test("im Ablageordner steht zu keinem Zeitpunkt lesbarer Inhalt", async (t) => {
   const { store, dir } = await frisch(t);
 
   const spuren = ["Miete", "Sparplan", "Krankenkasse", "Hauptkarte", "Zahnarzt",
-                  "5000", "2026-08", "einnahmen", "dauerauftraege", PASSWORT];
+                  "5000", "2026-08", "einnahmen", "fixkosten", PASSWORT];
 
   const pruefeOrdner = (schritt) => {
     const offen = [];

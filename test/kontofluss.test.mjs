@@ -41,7 +41,7 @@ function jeffrey() {
     { id: "k-saxo", name: "Saxo", institut: "", aktiv: true }
   );
   const monat = state.months["2026-08"];
-  monat.dauerauftraege.push(
+  monat.fixkosten.push(
     umbuchung("Sparen", 400, KONTO_HAUPT, "k-spar"),
     umbuchung("Taggeld", 500, KONTO_HAUPT, "k-tagg"),
     umbuchung("Depot", 400, KONTO_HAUPT, "k-saxo")
@@ -127,7 +127,7 @@ test("Ketten ergeben Ebenen: Lohn → Spar → Depot liegt auf 1, 2, 3", () => {
     { id: "k-saxo", name: "Saxo", institut: "", aktiv: true }
   );
   const monat = state.months["2026-08"];
-  monat.dauerauftraege.push(
+  monat.fixkosten.push(
     umbuchung("Sparen", 400, KONTO_HAUPT, "k-spar"),
     umbuchung("Depot", 100, "k-spar", "k-saxo")
   );

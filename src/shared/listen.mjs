@@ -24,7 +24,7 @@ import {
  *
  * @param {object} state
  * @param {object} month
- * @param {"dauerauftraege"|"fixkosten"|"ausgaben"} liste
+ * @param {"fixkosten"|"ausgaben"} liste
  * @returns {{id: string, name: string, farbe: string, wirkung: string,
  *            zeilen: object[], summe: number, ausgenommen: number}[]}
  */
