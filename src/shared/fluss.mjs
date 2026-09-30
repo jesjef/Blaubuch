@@ -57,7 +57,8 @@ export function verwendung(state, month) {
   const t = totals(state, month);
 
   const bloecke = [
-    { key: "da", name: "Daueraufträge", wert: t.da },
+    /* Kurz gehalten: die Beschriftung im Diagramm hat kaum Platz. Die
+       Daueraufträge stecken seit Fassung 7 mit darin. */
     { key: "fix", name: "Fixkosten", wert: t.fix },
     { key: "kk", name: "Kreditkarten", wert: t.kk },
     { key: "re", name: "Ausgaben", wert: t.re }

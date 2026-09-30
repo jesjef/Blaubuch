@@ -41,7 +41,7 @@ const datei4 = () => ({
 
 const m7 = (state) => state.months["2026-07"];
 const zeile = (monat, name) =>
-  [...monat.dauerauftraege, ...monat.fixkosten, ...monat.ausgaben].find((z) => z.name === name);
+  [...monat.fixkosten, ...monat.ausgaben].find((z) => z.name === name);
 const einnahme = (monat, name) => monat.einnahmen.find((e) => e.name === name);
 
 /* ------------------------------------------------------------------ *
@@ -154,7 +154,7 @@ test("gelb wird lila, nicht Sparen", () => {
   assert.equal(zeile(monat, "Sparplan").klasse, "investition");
   /* Feld heisst jetzt faelligAm und traegt einen Tag im Monat; das alte
      „tag" mit der Markierung darf nirgends ueberleben. */
-  assert.ok([...monat.dauerauftraege, ...monat.fixkosten, ...monat.ausgaben]
+  assert.ok([...monat.fixkosten, ...monat.ausgaben]
     .every((z) => z.tag === undefined && z.faelligAm === null));
 
   const meldung = repariert.find((r) => /blockiert|lila/i.test(r));
@@ -260,7 +260,7 @@ test("eine Zeile mit „läuft bis“ fällt im Folgemonat weg", () => {
 
   const neu = monthFromPrevious(monat, "2026-08");
   assert.ok(!neu.fixkosten.some((z) => z.name === "Krankenkasse"), "abgelaufen, also weg");
-  assert.ok(neu.dauerauftraege.some((z) => z.name === "Miete"), "läuft noch");
+  assert.ok(neu.fixkosten.some((z) => z.name === "Miete"), "läuft noch");
 });
 
 /* ------------------------------------------------------------------ *
@@ -282,8 +282,7 @@ test("wiederkehrendes wandert mit, Einmaliges nicht", () => {
   const { state } = migrate(datei4());
   const neu = monthFromPrevious(m7(state), "2026-08", state);
 
-  assert.equal(neu.dauerauftraege.length, 3);
-  assert.equal(neu.fixkosten.length, 1);
+  assert.equal(neu.fixkosten.length, 4, "seit Fassung 7 eine Liste: drei Auftraege und eine Fixkostenzeile");
   assert.deepEqual(neu.ausgaben, [], "Ausgaben sind einmalig");
   assert.equal(neu.einnahmen.find((e) => e.name === "Nettolohn").betrag, 5000, "Erwerb wiederholt sich");
   assert.equal(neu.einnahmen.find((e) => e.name === "Geliehen").betrag, 0, "Geliehenes ist eine Momentaufnahme");
@@ -322,7 +321,7 @@ test("völliger Unsinn ergibt einen leeren, benutzbaren Zustand", () => {
     assert.ok(state.konten.length >= 1, "ohne Konto liesse sich nichts buchen");
     assert.ok(state.klassen.length >= 4);
     const monat = state.months[state.currentMonth];
-    assert.ok(Array.isArray(monat.einnahmen) && Array.isArray(monat.dauerauftraege));
+    assert.ok(Array.isArray(monat.einnahmen) && Array.isArray(monat.fixkosten));
     assert.ok(monat.anfangsbestaende && typeof monat.anfangsbestaende === "object");
     assert.doesNotThrow(() => totals(state, monat));
   }

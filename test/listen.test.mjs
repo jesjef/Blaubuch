@@ -24,7 +24,7 @@ test("die Untersummen ergeben genau die Summe der Karte", () => {
   const monat = state.months["2026-08"];
   const t = totals(state, monat);
 
-  for (const [liste, summe] of [["dauerauftraege", t.da], ["fixkosten", t.fix], ["ausgaben", t.re]]) {
+  for (const [liste, summe] of [["fixkosten", t.fix], ["ausgaben", t.re]]) {
     const g = gruppen(state, monat, liste);
     const zusammen = toRappen(g.reduce((s, x) => s + x.summe, 0));
     assert.equal(zusammen, summe, liste + ": Untersummen weichen von der Kartensumme ab");
@@ -34,20 +34,20 @@ test("die Untersummen ergeben genau die Summe der Karte", () => {
 test("jede Zeile taucht in genau einer Gruppe auf", () => {
   const state = beispielState();
   const monat = state.months["2026-08"];
-  monat.dauerauftraege.push(zeile("Extra", 50, "sparen"));
+  monat.fixkosten.push(zeile("Extra", 50, "sparen"));
 
-  const g = gruppen(state, monat, "dauerauftraege");
+  const g = gruppen(state, monat, "fixkosten");
   const ids = g.flatMap((x) => x.zeilen.map((z) => z.id));
-  assert.equal(ids.length, monat.dauerauftraege.length);
+  assert.equal(ids.length, monat.fixkosten.length);
   assert.equal(new Set(ids).size, ids.length, "eine Zeile steht doppelt");
 });
 
 test("Gruppen stehen absteigend nach Untersumme", () => {
   const state = beispielState();
   const monat = state.months["2026-08"];
-  monat.dauerauftraege.push(zeile("Klein", 10, "sparen"), zeile("Gross", 9000, "blockiert"));
+  monat.fixkosten.push(zeile("Klein", 10, "sparen"), zeile("Gross", 9000, "blockiert"));
 
-  const g = gruppen(state, monat, "dauerauftraege");
+  const g = gruppen(state, monat, "fixkosten");
   for (let i = 1; i < g.length; i++) {
     assert.ok(g[i - 1].summe >= g[i].summe, "nicht absteigend");
   }
@@ -57,12 +57,12 @@ test("Umbuchungen und pausierte Zeilen bleiben sichtbar, zaehlen aber nicht mit"
   const state = beispielState();
   state.konten.push({ id: "k-spar", name: "Sparkonto", institut: "", aktiv: true });
   const monat = state.months["2026-08"];
-  monat.dauerauftraege.push(
+  monat.fixkosten.push(
     zeile("Sparen", 400, "sparen", { nachKonto: "k-spar" }),
     zeile("Pausiert", 300, "sparen", { aktiv: false })
   );
 
-  const g = gruppen(state, monat, "dauerauftraege");
+  const g = gruppen(state, monat, "fixkosten");
   const sparen = g.find((x) => x.id === "sparen");
   assert.equal(sparen.zeilen.length, 2, "beide Zeilen muessen sichtbar bleiben");
   assert.equal(sparen.summe, 0, "keine der beiden zaehlt als Kosten");
@@ -70,7 +70,7 @@ test("Umbuchungen und pausierte Zeilen bleiben sichtbar, zaehlen aber nicht mit"
 
   /* Und die Zusage haelt weiterhin. */
   const t = totals(state, monat);
-  assert.equal(toRappen(g.reduce((s, x) => s + x.summe, 0)), t.da);
+  assert.equal(toRappen(g.reduce((s, x) => s + x.summe, 0)), t.fix);
 });
 
 test("eine leere Liste ergibt keine Gruppen statt einer leeren Gruppe", () => {

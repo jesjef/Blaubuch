@@ -14,6 +14,11 @@
  *  3. Klassifizierungen tragen eine Wirkung mit drei Werten statt eines
  *     Wahrheitswerts (siehe klassen.mjs).
  *
+ * Fassung 7 legt Dauerauftraege und Fixkosten zu einer Liste zusammen.
+ * Beide wurden gleich gerechnet und gleich in den Folgemonat uebernommen;
+ * der Unterschied lag nur im Zahlungsweg. Was davon Umbuchung ist, sagt
+ * das Zielkonto, nicht die Liste.
+ *
  * Punkt 2 behebt eine falsche Zahl, kein fehlendes Feature. Bis Fassung 4
  * galt `kosten = da + fix + kk + re`, und ein Dauerauftrag auf das eigene
  * Sparkonto senkte damit Restwert und Sparquote — ausgerechnet in der App,
@@ -31,7 +36,7 @@ export {
   STANDARD_KLASSEN, STANDARD_KLASSE, standardKlassen, klasseVon, leseKlassen
 } from "./klassen.mjs";
 
-export const SCHEMA_VERSION = 6;
+export const SCHEMA_VERSION = 7;
 
 /**
  * Woher eine Einnahme kommt. Entscheidet die Rechnung, nicht die
@@ -63,7 +68,7 @@ export const MONTH_NAMES = [
 export const KEIN_LIMIT = 0;
 
 /** Die Listen, in denen Buchungszeilen stehen. Reihenfolge ist Anzeigereihenfolge. */
-export const ZEILEN_LISTEN = ["dauerauftraege", "fixkosten", "ausgaben"];
+export const ZEILEN_LISTEN = ["fixkosten", "ausgaben"];
 
 const CHF = new Intl.NumberFormat("de-CH", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
@@ -162,7 +167,7 @@ export const standardKonten = () =>
 
 const aktiveKonten = (state) => (state?.konten ?? []).filter((k) => k && k.aktiv !== false);
 
-/** Alle Buchungszeilen eines Monats, quer ueber die drei Listen. */
+/** Alle Buchungszeilen eines Monats, quer ueber beide Listen. */
 export const alleZeilen = (month) =>
   ZEILEN_LISTEN.flatMap((name) => month?.[name] ?? []);
 
@@ -258,7 +263,7 @@ export function totals(state, month) {
   const byKlasse = {};
   for (const k of klassen) byKlasse[k.id] = 0;
 
-  const bloecke = { dauerauftraege: 0, fixkosten: 0, ausgaben: 0 };
+  const bloecke = { fixkosten: 0, ausgaben: 0 };
   let umgebucht = 0;
 
   for (const liste of ZEILEN_LISTEN) {
@@ -283,10 +288,9 @@ export function totals(state, month) {
   const standard = klasseVon(klassen, STANDARD_KLASSE);
   byKlasse[standard.id] = toRappen((byKlasse[standard.id] ?? 0) + kk);
 
-  const da = bloecke.dauerauftraege;
   const fix = bloecke.fixkosten;
   const re = bloecke.ausgaben;
-  const kosten = toRappen(da + fix + re + kk);
+  const kosten = toRappen(fix + re + kk);
 
   const verloren = toRappen(
     klassen.filter((k) => k.wirkung === "verloren").reduce((s, k) => s + (byKlasse[k.id] ?? 0), 0)
@@ -296,7 +300,7 @@ export function totals(state, month) {
 
   return {
     bestand, erwerb, geliehen, sonstige, einnahmen,
-    da, fix, kk, re, kosten, rest,
+    fix, kk, re, kosten, rest,
     umgebucht, durchlauf: toRappen(durchlauf),
     byKlasse, verloren,
     /* Was ausgegeben, aber nicht verloren ist: angelegt oder gespart. */
@@ -315,7 +319,6 @@ export function emptyMonth(state) {
   return {
     anfangsbestaende,
     einnahmen: [],
-    dauerauftraege: [],
     fixkosten: [],
     kreditkarten: [],
     ausgaben: []
@@ -372,7 +375,6 @@ export function monthFromPrevious(prev, neuerKey, state) {
       faelligAm: leseFaelligAm(e.faelligAm),
       notiz: typeof e.notiz === "string" ? e.notiz : ""
     })),
-    dauerauftraege: uebernehmen(prev.dauerauftraege),
     fixkosten: uebernehmen(prev.fixkosten),
     /* Karten bleiben bestehen, der Saldo faengt bei 0 an — das Limit
        gehoert zum Kartenvertrag und aendert sich nicht monatlich. */
@@ -446,6 +448,10 @@ function leseKarten(roh, altLimits, monatsKey, standardKonto, repariert) {
  *    Farbe von Sparen, die alte Bedeutung heisst „Investition blockiert“
  *    und ist lila.
  *
+ *  - Bis Fassung 6 standen Dauerauftraege in einer eigenen Liste. Sie
+ *    kommen jetzt vor die Fixkosten in dieselbe Liste — in der Reihenfolge,
+ *    in der die beiden Karten untereinander standen.
+ *
  * Was migrate NICHT kann: erkennen, welche Dauerauftraege in Wahrheit
  * Umbuchungen auf eigene Konten sind. Blaubuch kennt das Zielkonto nicht.
  * Diese Zeilen muessen einmalig von Hand umgehaengt werden — das gehoert
@@ -485,6 +491,7 @@ export function migrate(raw) {
   };
 
   let ausGelb = 0;
+  let zusammengelegt = 0;
 
   const leseKlasse = (x) => {
     if (typeof x.klasse === "string" && kennungen.has(x.klasse)) return x.klasse;
@@ -561,7 +568,12 @@ export function migrate(raw) {
     for (const liste of ZEILEN_LISTEN) {
       /* Bis Fassung 4 hiess "ausgaben" noch "rechnungen". */
       const roh = liste === "ausgaben" && !Array.isArray(m?.ausgaben) ? m?.rechnungen : m?.[liste];
-      const list = Array.isArray(roh) ? roh : [];
+      let list = Array.isArray(roh) ? roh : [];
+      /* Bis Fassung 6 hatten Dauerauftraege eine eigene Liste. */
+      if (liste === "fixkosten" && Array.isArray(m?.dauerauftraege) && m.dauerauftraege.length > 0) {
+        zusammengelegt += m.dauerauftraege.length;
+        list = [...m.dauerauftraege, ...list];
+      }
       base[liste] = list
         .filter((x) => x && typeof x.name === "string" && x.name.trim())
         .map((x) => ({
@@ -596,6 +608,14 @@ export function migrate(raw) {
       (ausGelb === 1 ? "Eine Zeile war" : ausGelb + " Zeilen waren")
       + " mit Gelb als „Investition gebunden“ markiert und heisst jetzt "
       + "„Investition blockiert“ (lila). Gelb steht neu für Sparen."
+    );
+  }
+
+  if (zusammengelegt > 0) {
+    repariert.push(
+      "Daueraufträge und Fixkosten stehen jetzt in einer Liste ("
+      + (zusammengelegt === 1 ? "1 Zeile" : zusammengelegt + " Zeilen")
+      + " über alle Monate umgehängt). Beträge und Summen bleiben gleich."
     );
   }
 
@@ -690,7 +710,7 @@ export function buildInsights(state, monthKey) {
   }
 
   const blocks = [
-    ["Daueraufträge", t.da], ["Fixkosten", t.fix],
+    ["Fixkosten & Daueraufträge", t.fix],
     ["Kreditkarten", t.kk], ["Ausgaben", t.re]
   ].sort((a, b) => b[1] - a[1]);
   if (blocks[0][1] > 0 && t.kosten > 0) {
@@ -770,8 +790,8 @@ export function buildReport(state, monthKey) {
   L.push("  → Erwerbseinkommen des Monats: " + formatCHF(t.erwerb));
   L.push("");
 
-  const TITEL = { dauerauftraege: "DAUERAUFTRÄGE", fixkosten: "FIXKOSTEN", ausgaben: "AUSGABEN" };
-  const SUMME = { dauerauftraege: t.da, fixkosten: t.fix, ausgaben: t.re };
+  const TITEL = { fixkosten: "FIXKOSTEN & DAUERAUFTRÄGE", ausgaben: "AUSGABEN" };
+  const SUMME = { fixkosten: t.fix, ausgaben: t.re };
   for (const liste of ZEILEN_LISTEN) {
     L.push(TITEL[liste] + " gesamt " + formatCHF(SUMME[liste]) + ":");
     const zeilen = month[liste] ?? [];

@@ -14,7 +14,7 @@ import { beispielMonat, beispielState, KONTO_HAUPT, KONTO_BAR } from "./fixtures
 const stamm = beispielState();
 const leererMonat = () => emptyMonth(stamm);
 
-/* Beispielmonat: Mittel 5600, Kosten 2800 (DA 1800, Fix 250, KK 500, Re 250),
+/* Beispielmonat: Mittel 5600, Kosten 2800 (Fixkosten 2050, KK 500, Re 250),
    Restwert 2800. */
 
 /* ------------------------------------------------------------------ *
@@ -51,8 +51,8 @@ test("ein Monat im Minus zeigt die Deckungslücke als Quelle", () => {
 
 test("Verwendung sortiert die Kostenblöcke absteigend, Restwert zuletzt", () => {
   const v = verwendung(stamm, beispielMonat());
-  assert.deepEqual(v.map((x) => x.key), ["da", "kk", "fix", "re", "rest"]);
-  assert.deepEqual(v.slice(0, 4).map((x) => x.stufe), [0, 1, 2, 3], "die Reihenfolge ist die Farbstufe");
+  assert.deepEqual(v.map((x) => x.key), ["fix", "kk", "re", "rest"]);
+  assert.deepEqual(v.slice(0, 3).map((x) => x.stufe), [0, 1, 2], "die Reihenfolge ist die Farbstufe");
   assert.equal(v.at(-1).rolle, ROLLE.rest);
 });
 
@@ -109,10 +109,10 @@ test("Knotenhöhen verhalten sich wie die Beträge", () => {
   const plan = sankeyLayout(daten, { breite: 360, hoehe: 250 });
   const rechts = plan.knoten.filter((k) => k.seite === "rechts");
 
-  const da = rechts.find((k) => k.key === "da");
   const fix = rechts.find((k) => k.key === "fix");
-  /* 1800 zu 250 — das Verhältnis muss sich in den Höhen wiederfinden. */
-  assert.ok(da.h / fix.h > 5, "Verhältnis verzerrt: " + da.h + " zu " + fix.h);
+  const re = rechts.find((k) => k.key === "re");
+  /* 2050 zu 250 — das Verhältnis muss sich in den Höhen wiederfinden. */
+  assert.ok(fix.h / re.h > 7, "Verhältnis verzerrt: " + fix.h + " zu " + re.h);
 });
 
 test("es gibt genau ein Band je Quelle und je Verwendung", () => {
@@ -146,7 +146,7 @@ test("Bandpfade sind wohlgeformt", () => {
  * ------------------------------------------------------------------ */
 
 /**
- * Ein Monat, in dem zwei Posten winzig sind: Fixkosten 75 und Restwert 125
+ * Ein Monat, in dem zwei Posten winzig sind: Kreditkarte 75 und Restwert 125
  * von 5000 verfuegbaren Mitteln — also je rund zwei Prozent. Genau dieses
  * Verhaeltnis laesst die Baender auf wenige Einheiten zusammenschrumpfen
  * und bringt die Beschriftungen zum Kollidieren.
@@ -161,24 +161,20 @@ function monatMitWinzigenPosten() {
     { id: "e1", name: "Nettolohn", betrag: 4800, art: "erwerb", konto: KONTO_HAUPT, aktiv: true },
     { id: "e2", name: "Spesen", betrag: 100, art: "erwerb", konto: KONTO_HAUPT, aktiv: true }
   ];
-  m.dauerauftraege = [
+  m.fixkosten = [
     { id: "1", name: "Miete", betrag: 1200, klasse: "ausgaben", vonKonto: KONTO_HAUPT, aktiv: true },
     { id: "2", name: "Leasing", betrag: 300, klasse: "ausgaben", vonKonto: KONTO_HAUPT, aktiv: true },
     { id: "3", name: "Sparplan", betrag: 100, klasse: "investition", vonKonto: KONTO_HAUPT, aktiv: true },
     { id: "4", name: "Vorsorge", betrag: 100, klasse: "blockiert", vonKonto: KONTO_HAUPT, aktiv: true }
   ];
-  m.fixkosten = [
-    { id: "5", name: "Abo", betrag: 30, klasse: "ausgaben", vonKonto: KONTO_HAUPT, aktiv: true },
-    { id: "6", name: "Versicherung", betrag: 45, klasse: "ausgaben", vonKonto: KONTO_HAUPT, aktiv: true }
-  ];
   m.kreditkarten = [
-    { id: "7", name: "Erste", betrag: 1200, limit: 2000, vonKonto: KONTO_HAUPT },
-    { id: "8", name: "Zweite", betrag: 300, limit: 1000, vonKonto: KONTO_HAUPT }
+    { id: "7", name: "Erste", betrag: 75, limit: 2000, vonKonto: KONTO_HAUPT }
   ];
   m.ausgaben = [
     { id: "9", name: "Steuer", betrag: 1000, klasse: "ausgaben", vonKonto: KONTO_HAUPT, aktiv: true },
     { id: "10", name: "Reparatur", betrag: 550, klasse: "ausgaben", vonKonto: KONTO_HAUPT, aktiv: true },
-    { id: "11", name: "Kleinteil", betrag: 50, klasse: "ausgaben", vonKonto: KONTO_HAUPT, aktiv: true }
+    { id: "11", name: "Kleinteil", betrag: 50, klasse: "ausgaben", vonKonto: KONTO_HAUPT, aktiv: true },
+    { id: "12", name: "Umzug", betrag: 1500, klasse: "ausgaben", vonKonto: KONTO_HAUPT, aktiv: true }
   ];
   return m;
 }
@@ -320,9 +316,9 @@ test("Ring eines leeren Monats bleibt leer", () => {
 test("Beschriftungen nennen Betrag und Anteil", () => {
   const daten = flussDaten(stamm, beispielMonat());
   const t = beschrifte(daten.rechts[0], daten.summe);
-  assert.equal(t.name, "Daueraufträge");
-  assert.match(t.betrag, /1.800\.00 Fr\./);
-  assert.equal(t.prozent, "32.1%");
+  assert.equal(t.name, "Fixkosten", "kurz, sonst wird die Beschriftung abgeschnitten");
+  assert.match(t.betrag, /2.050\.00 Fr\./);
+  assert.equal(t.prozent, "36.6%");
 });
 
 test("Beschriftung teilt nicht durch null", () => {
@@ -340,7 +336,7 @@ test("die Verwendung stimmt mit den Kartensummen überein", () => {
   const v = verwendung(stamm, m);
   const finde = (k) => v.find((x) => x.key === k)?.wert ?? 0;
 
-  assert.equal(finde("da"), t.da);
+  assert.equal(finde("da"), 0, "einen eigenen Dauerauftragsblock gibt es nicht mehr");
   assert.equal(finde("fix"), t.fix);
   assert.equal(finde("kk"), t.kk);
   assert.equal(finde("re"), t.re);

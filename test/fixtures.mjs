@@ -24,8 +24,8 @@ export const KONTO_BAR = "k-bar";
  *   Erwerbseinkommen  5000 + 200  = 5200
  *   Bestand            300 + 100  =  400
  *   verfuegbare Mittel             = 5600
- *   Daueraufftraege   1500 + 300  = 1800   (300 davon Investition)
- *   Fixkosten          200 +  50  =  250
+ *   Fixkosten & DA    1500 + 300
+ *                   + 200 +  50  = 2050   (300 davon Investition)
  *   Kreditkarten       400 + 100  =  500
  *   Ausgaben                       =  250
  *   Gesamtkosten                   = 2800
@@ -38,11 +38,9 @@ export function beispielMonat() {
       { id: id(), name: "Nettolohn", betrag: 5000, art: "erwerb", konto: KONTO_HAUPT, aktiv: true, faelligAm: null, notiz: "" },
       { id: id(), name: "Spesen", betrag: 200, art: "erwerb", konto: KONTO_HAUPT, aktiv: true, faelligAm: null, notiz: "" }
     ],
-    dauerauftraege: [
-      zeile("Miete", 1500, "ausgaben"),
-      zeile("Sparplan", 300, "investition")
-    ],
     fixkosten: [
+      zeile("Miete", 1500, "ausgaben"),
+      zeile("Sparplan", 300, "investition"),
       zeile("Krankenkasse", 200, "ausgaben"),
       zeile("Handyabo", 50, "ausgaben")
     ],

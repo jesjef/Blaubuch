@@ -10,7 +10,7 @@ Gebaut für die Frage, die eine Tabellenkalkulation schlecht beantwortet:
 ## Was es kann
 
 - **Monate statt Transaktionen.** Ein Monat besteht aus Einnahmen,
-  Daueraufträgen, Fixkosten, Kreditkartensalden und Ausgaben. Ein neuer
+  Fixkosten samt Daueraufträgen und LSV, Kreditkartensalden und Ausgaben. Ein neuer
   Monat übernimmt das Wiederkehrende und lässt das Einmalige weg.
 - **Ausgeben ist nicht gleich verlieren.** Jede Zeile trägt eine von drei
   Markierungen: Konsum, Investition unter eigener Kontrolle, Investition

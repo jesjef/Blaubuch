@@ -116,7 +116,7 @@ test("ein leeres Jahr zeichnet nichts, statt durch null zu teilen", () => {
 test("der Verlauf endet auf dem Restwert des Monats", () => {
   const state = beispielState();
   const monat = state.months["2026-08"];
-  monat.dauerauftraege[0].faelligAm = 1;
+  monat.fixkosten[0].faelligAm = 1;
   monat.einnahmen[0].faelligAm = 25;
 
   const v = liquiditaet(state, monat);
@@ -130,7 +130,7 @@ test("der tiefste Stand liegt vor dem Lohn, wenn die Miete vorher laeuft", () =>
   const monat = state.months["2026-08"];
   /* Alles ohne Tag zaehlt zum Monatsanfang — hier bekommt jede Zeile einen. */
   for (const e of monat.einnahmen) e.faelligAm = 25;
-  for (const z of [...monat.dauerauftraege, ...monat.fixkosten, ...monat.ausgaben]) z.faelligAm = 3;
+  for (const z of [...monat.fixkosten, ...monat.ausgaben]) z.faelligAm = 3;
   monat.kreditkarten = [];
 
   const v = liquiditaet(state, monat);
@@ -145,7 +145,7 @@ test("eine Umbuchung bewegt den Verlauf nicht — das Geld bleibt im Vermoegen",
   const monat = state.months["2026-08"];
   const vorher = liquiditaet(state, monat);
 
-  monat.dauerauftraege.push(zeile("Sparen", 400, "sparen", 10, { nachKonto: "k-spar" }));
+  monat.fixkosten.push(zeile("Sparen", 400, "sparen", 10, { nachKonto: "k-spar" }));
   const nachher = liquiditaet(state, monat);
 
   assert.equal(nachher.ende, vorher.ende);
@@ -188,7 +188,7 @@ test("die Kurve bleibt in der Flaeche und markiert den Tiefpunkt", () => {
   const state = beispielState();
   const monat = state.months["2026-08"];
   for (const e of monat.einnahmen) e.faelligAm = 25;
-  for (const z of monat.dauerauftraege) z.faelligAm = 3;
+  for (const z of monat.fixkosten) z.faelligAm = 3;
 
   const v = liquiditaet(state, monat);
   const plan = liquiditaetLayout(v);

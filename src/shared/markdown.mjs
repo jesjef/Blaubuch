@@ -20,8 +20,7 @@ import {
 } from "./budget.mjs";
 
 const TITEL = {
-  dauerauftraege: "Daueraufträge / LSV",
-  fixkosten: "Fixkosten",
+  fixkosten: "Fixkosten & Daueraufträge",
   ausgaben: "Ausgaben"
 };
 
@@ -118,7 +117,7 @@ export function buildMarkdown(state) {
       + "Bestand zu Monatsbeginn: " + formatCHF(t.bestand));
     L.push("");
 
-    const SUMME = { dauerauftraege: t.da, fixkosten: t.fix, ausgaben: t.re };
+    const SUMME = { fixkosten: t.fix, ausgaben: t.re };
     for (const liste of ZEILEN_LISTEN) {
       const zeilen = month[liste] ?? [];
       L.push("### " + TITEL[liste] + " — " + formatCHF(SUMME[liste]));
