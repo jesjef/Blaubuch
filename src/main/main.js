@@ -12,6 +12,7 @@ const { app, BrowserWindow, ipcMain, dialog, shell, Menu, clipboard, nativeTheme
 const fs = require("node:fs");
 const path = require("node:path");
 const { Store, DATA_NAME } = require("./store");
+const { richteKiZugriffEin } = require("./ki-zugriff");
 
 let mainWindow = null;
 let darfSchliessen = false;
@@ -163,6 +164,15 @@ handle("store:import", async () => {
 
 handle("store:decrypt-foreign", (_ev, { text, password }) =>
   store.decryptForeign(String(text ?? ""), String(password ?? "")));
+
+/* KI-Zugriff über MCP — standardmässig aus, siehe ki-zugriff.js. */
+const kiZugriff = richteKiZugriffEin({
+  app, ipcMain, handle, store,
+  fenster: () => mainWindow,
+  /* Im Testbetrieb neben den Testdaten, sonst im Benutzerordner — nie
+     neben einer portablen .exe auf einem Stick. */
+  verzeichnis: () => process.env.BLAUBUCH_DATA ?? app.getPath("userData")
+});
 
 handle("clipboard:write", (_ev, text) => {
   clipboard.writeText(String(text ?? ""));
@@ -452,6 +462,7 @@ if (!app.requestSingleInstanceLock()) {
   app.whenReady().then(() => {
     buildMenu();
     createWindow();
+    void kiZugriff.starte();
     app.on("activate", () => {
       if (BrowserWindow.getAllWindows().length === 0) createWindow();
     });

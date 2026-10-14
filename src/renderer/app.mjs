@@ -1485,8 +1485,51 @@ const einstellungen = baueEinstellungen({
   datenLoeschen: () => eintraegeLoeschen(),
   kontoZuruecksetzen: () => kontoZuruecksetzen(),
   beiSperrzeit: () => sperrWaechter.neuLesen(),
-  monatLoeschen: () => monatLoeschen()
+  monatLoeschen: () => monatLoeschen(),
+  ki: window.blaubuch.kiStatus ? {
+    status: () => window.blaubuch.kiStatus(),
+    einschalten: async () => {
+      const ok = await window.blaubuch.confirm({
+        title: "KI-Zugriff einschalten",
+        message: "Einer KI erlauben, Blaubuch zu lesen?",
+        detail: "Was die KI abfragt, geht an den Anbieter des Modells. Bei Claude ist das Anthropic. "
+          + "Mit einem lokalen Modell bleibt alles auf diesem Rechner.\n\n"
+          + "Der Zugriff gilt nur auf diesem Rechner, nur mit dem Zugangsschlüssel und nur, "
+          + "solange Blaubuch entsperrt ist. Ändern kann die KI nichts.",
+        confirmLabel: "Einschalten"
+      });
+      return ok ? window.blaubuch.kiEinschalten() : null;
+    },
+    ausschalten: () => window.blaubuch.kiAusschalten(),
+    neuerSchluessel: () => window.blaubuch.kiNeuerSchluessel(),
+    port: (p) => window.blaubuch.kiPort(p),
+    kopieren: async (text, meldung) => {
+      await window.blaubuch.copy(text);
+      announce(meldung);
+    },
+    beiStatus: (s) => zeigeKiMarke(s)
+  } : null
 });
+
+/* ------------------------------------------------------------------ *
+ * KI-Zugriff — Marke in der Kopfleiste und Stand für den Hauptprozess
+ * ------------------------------------------------------------------ */
+
+const kiMarke = el("span", "ki-marke", "KI");
+kiMarke.hidden = true;
+kiMarke.title = "KI-Zugriff ist eingeschaltet — die Einstellungen zeigen die letzten Abfragen";
+$("einstellungen").before(kiMarke);
+
+function zeigeKiMarke(status) {
+  kiMarke.hidden = !status?.an;
+  kiMarke.classList.toggle("fehler", Boolean(status?.fehler));
+}
+window.blaubuch.kiStatus?.().then(zeigeKiMarke).catch(() => {});
+
+/* Gesperrt oder noch nicht geladen: kein Stand. Der Hauptprozess prueft
+   den Tresor ebenfalls — doppelt haelt hier besser. */
+window.blaubuch.onKiAnfrage?.(() =>
+  state && !document.body.classList.contains("gated") ? JSON.stringify(state) : null);
 
 /**
  * Leert alle Monate, laesst Tresor und Passwort unangetastet.

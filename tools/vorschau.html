@@ -130,7 +130,28 @@
     info: async () => ({ version: "Vorschau", dataPath: "(kein Dateizugriff in der Vorschau)" }),
     confirm: async () => window.confirm("Vorschau: fortfahren?"),
     readyToClose: () => {},
-    onMenu: () => () => {}
+    onMenu: () => () => {},
+    /* KI-Zugriff: nur der Zustand der Einstellungsseite, kein Server.
+       ?ki=1 startet eingeschaltet, mit zwei Beispielabfragen. */
+    ...(() => {
+      const ki = {
+        an: parameter.has("ki"), laeuft: parameter.has("ki"), port: 41041,
+        adresse: "http://127.0.0.1:41041/mcp", token: crypto.randomUUID(), fehler: null,
+        protokoll: parameter.has("ki") ? [
+          { zeit: new Date().toISOString(), werkzeug: "monat_lesen", monat: "2026-08" },
+          { zeit: new Date().toISOString(), werkzeug: "bericht", monat: null }
+        ] : []
+      };
+      const kopie = () => ({ ...ki, token: ki.an ? ki.token : null, protokoll: ki.protokoll.slice() });
+      return {
+        kiStatus: async () => kopie(),
+        kiEinschalten: async () => { ki.an = ki.laeuft = true; return kopie(); },
+        kiAusschalten: async () => { ki.an = ki.laeuft = false; return kopie(); },
+        kiNeuerSchluessel: async () => { ki.token = crypto.randomUUID(); return kopie(); },
+        kiPort: async (p) => { ki.port = p; ki.adresse = "http://127.0.0.1:" + p + "/mcp"; return kopie(); },
+        onKiAnfrage: () => {}
+      };
+    })()
   };
 
   await import("../src/renderer/app.mjs");
