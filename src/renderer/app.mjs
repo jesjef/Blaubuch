@@ -1723,12 +1723,15 @@ async function importieren() {
     return;
   }
 
-  const { state: neu, repariert } = migrate(roh);
+  const { state: neu, repariert, ausNeuererFassung } = migrate(roh);
   const anzahl = Object.keys(neu.months).length;
   const ok = await window.blaubuch.confirm({
     title: "Daten einlesen",
     message: anzahl + " Monat(e) aus der Datei übernehmen?",
-    detail: "Der aktuelle Stand wird ersetzt. Über den Pfeil in der Kopfleiste lässt sich das rückgängig machen.",
+    detail: (ausNeuererFassung
+      ? "Die Datei stammt aus einer neueren Blaubuch-Fassung. Übernommen wird nur, was diese Fassung versteht. "
+      : "")
+      + "Der aktuelle Stand wird ersetzt. Über den Pfeil in der Kopfleiste lässt sich das rückgängig machen.",
     confirmLabel: "Übernehmen"
   });
   if (!ok) return;
@@ -1909,10 +1912,18 @@ async function boot() {
     return;
   }
 
-  const { state: geladen, repariert } = migrate(roh);
+  const { state: geladen, repariert, ausNeuererFassung } = migrate(roh);
   state = geladen;
   render();
-  markLoaded(roh.version !== SCHEMA_VERSION, repariert);
+  if (ausNeuererFassung) {
+    /* Nicht zum Speichern auffordern: das wuerde die Datei herabstufen. */
+    dirty = false;
+    saveBtn.disabled = true;
+    setSaveState("Neuere Fassung", "err");
+    showNotice(repariert.join(" "), "err");
+  } else {
+    markLoaded(roh.version !== SCHEMA_VERSION, repariert);
+  }
 
   if (tor.altdatei) {
     showNotice("Die Daten sind jetzt verschlüsselt. Die alte unverschlüsselte Datei liegt "

@@ -235,7 +235,10 @@ export function kontoSaldo(state, month, kontoId) {
  *
  * Die Sparquote rechnet gegen `erwerb`, nicht gegen `einnahmen`: sonst
  * verbessert ein hoher Kontostand oder ein Darlehen die Quote, ohne dass
- * ein Franken mehr verdient wurde.
+ * ein Franken mehr verdient wurde. Das gilt fuer Zaehler UND Nenner —
+ * gezaehlt wird `ueberschuss`, nicht `rest`, denn im Restwert stecken
+ * Bestand und Darlehen. Sonstige Mittel (Rueckerstattung, Geschenk) zaehlen
+ * mit: sie muessen nicht zurueck und waren zu Monatsbeginn noch nicht da.
  *
  * `umgebucht` steht neben den Kosten und nicht darin. `verloren` kommt aus
  * der Wirkung der Klassifizierungen — nicht aus ihrer Farbe.
@@ -297,15 +300,16 @@ export function totals(state, month) {
   );
 
   const rest = toRappen(einnahmen - kosten);
+  const ueberschuss = toRappen(erwerb + sonstige - kosten);
 
   return {
     bestand, erwerb, geliehen, sonstige, einnahmen,
-    fix, kk, re, kosten, rest,
+    fix, kk, re, kosten, rest, ueberschuss,
     umgebucht, durchlauf: toRappen(durchlauf),
     byKlasse, verloren,
     /* Was ausgegeben, aber nicht verloren ist: angelegt oder gespart. */
     angelegt: toRappen(kosten - verloren),
-    sparquote: erwerb > 0 ? (rest / erwerb) * 100 : null
+    sparquote: erwerb > 0 ? (ueberschuss / erwerb) * 100 : null
   };
 }
 
@@ -438,7 +442,14 @@ function leseKarten(roh, altLimits, monatsKey, standardKonto, repariert) {
 /**
  * Bringt beliebige gespeicherte Daten in die aktuelle Form.
  * Wirft nie — eine defekte Datei darf die App nicht am Start hindern.
- * Gibt {state, repariert} zurueck, damit die Oberflaeche es melden kann.
+ * Gibt {state, repariert, ausNeuererFassung} zurueck, damit die
+ * Oberflaeche es melden kann.
+ *
+ * `ausNeuererFassung`: Die Datei traegt eine hoehere Schemanummer, als
+ * dieses Programm kennt. Gelesen wird trotzdem, was verstanden wird —
+ * aber Speichern wuerde alles verwerfen, was die neuere Fassung
+ * hinzugefuegt hat. Die Oberflaeche darf deshalb nicht von sich aus
+ * zum Speichern auffordern.
  *
  * Zwei Umstellungen aus Fassung 4 und aelter veraendern Bedeutung und
  * werden deshalb gemeldet statt still gemacht:
@@ -459,6 +470,15 @@ function leseKarten(roh, altLimits, monatsKey, standardKonto, repariert) {
  */
 export function migrate(raw) {
   const repariert = [];
+  const ausNeuererFassung = Number.isInteger(raw?.version) && raw.version > SCHEMA_VERSION;
+  if (ausNeuererFassung) {
+    repariert.push(
+      "Die Daten stammen aus einer neueren Blaubuch-Fassung (Format " + raw.version
+      + ", dieses Programm kennt Format " + SCHEMA_VERSION + "). Angezeigt wird, was "
+      + "diese Fassung versteht. Wer hier speichert, verliert, was die neuere Fassung "
+      + "hinzugefügt hat — besser die neuere Fassung installieren."
+    );
+  }
   const klassen = leseKlassen(raw?.klassen);
   const kennungen = new Set(klassen.map((k) => k.id));
 
@@ -620,17 +640,20 @@ export function migrate(raw) {
   }
 
   if (Object.keys(state.months).length === 0) {
-    const key = new Date().toISOString().slice(0, 7);
+    /* Oertlicher Monat, nicht UTC: sonst beginnt eine leere Datei in den
+       ersten Stunden eines Monats noch im Vormonat. */
+    const jetzt = new Date();
+    const key = jetzt.getFullYear() + "-" + String(jetzt.getMonth() + 1).padStart(2, "0");
     state.months[key] = emptyMonth(state);
     state.currentMonth = key;
-    return { state, repariert };
+    return { state, repariert, ausNeuererFassung };
   }
 
   state.currentMonth = isMonthKey(raw?.currentMonth) && state.months[raw.currentMonth]
     ? raw.currentMonth
     : sortedMonths(state).pop();
 
-  return { state, repariert };
+  return { state, repariert, ausNeuererFassung };
 }
 
 /* ------------------------------------------------------------------ *
@@ -650,10 +673,10 @@ export function buildInsights(state, monthKey) {
 
   if (t.sparquote !== null) {
     out.push({
-      kind: t.rest < 0 ? "warn" : t.sparquote >= 10 ? "good" : "",
+      kind: t.rest < 0 || t.ueberschuss < 0 ? "warn" : t.sparquote >= 10 ? "good" : "",
       parts: [
         "Sparquote auf Erwerbseinkommen: ", { b: t.sparquote.toFixed(1) + "%" },
-        " (" + formatCHF(t.rest) + " von " + formatCHF(t.erwerb) + ")."
+        " (" + formatCHF(t.ueberschuss) + " von " + formatCHF(t.erwerb) + ")."
       ]
     });
   }

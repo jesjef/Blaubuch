@@ -107,7 +107,10 @@
   };
 
   const parameter = new URLSearchParams(location.search);
-  let gespeichert = JSON.stringify(parameter.has("leer") ? leer : demo);
+  /* ?fassung=99 spielt eine Datei aus einer neueren Programmfassung vor. */
+  const vorlage = parameter.has("leer") ? leer : demo;
+  if (parameter.has("fassung")) vorlage.version = Number(parameter.get("fassung"));
+  let gespeichert = JSON.stringify(vorlage);
 
   window.blaubuch = {
     vaultStatus: async () => ({ zustand: "verschluesselt", path: "(Vorschau)", fehlversuche: 0, rest: 10, loeschenNach: 10, warnenAbRest: 5 }),

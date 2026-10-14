@@ -128,3 +128,25 @@ test("„läuft bis“ gilt weiter — auch für frühere Daueraufträge", () =>
   assert.ok(!nov.fixkosten.some((z) => z.name === "Leasing"), "im November vorbei");
   assert.equal(okt.dauerauftraege, undefined, "ein neuer Monat kennt die alte Liste nicht");
 });
+
+/* ------------------------------------------------------------------ *
+ * Datei aus einer neueren Fassung
+ * ------------------------------------------------------------------ */
+
+test("eine Datei aus einer neueren Fassung wird erkannt, nicht still herabgestuft", () => {
+  const zukunft = { ...datei6(), version: SCHEMA_VERSION + 1, neuesFeld: { wichtig: true } };
+  const { ausNeuererFassung, repariert } = migrate(zukunft);
+
+  assert.equal(ausNeuererFassung, true);
+  assert.ok(
+    repariert.some((r) => r.includes("neueren")),
+    "die Oberfläche muss sagen können, warum Speichern hier Daten kostet"
+  );
+});
+
+test("die eigene und ältere Fassungen gelten nicht als neuer", () => {
+  assert.equal(migrate(datei6()).ausNeuererFassung, false);
+  assert.equal(migrate({ ...datei6(), version: SCHEMA_VERSION }).ausNeuererFassung, false);
+  assert.equal(migrate(null).ausNeuererFassung, false);
+  assert.equal(migrate({ version: "7x" }).ausNeuererFassung, false, "Unsinn ist kein Zukunftsformat");
+});
