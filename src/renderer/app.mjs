@@ -24,6 +24,7 @@ import { zeichneKontofluss, kontoflussTabelle } from "./kontodiagramm.mjs";
 import { zeichneJahr, jahrTabelle, zeichneLiquiditaet, liquiditaetTabelle } from "./jahrdiagramm.mjs";
 import { jahre, liquiditaet } from "../shared/jahr.mjs";
 import { gruppen } from "../shared/listen.mjs";
+import { istVeraltet, wendeAn, beschreibe } from "../shared/vorschlaege.mjs";
 
 const AUTOSAVE_MS = 1200;
 const UNDO_MAX = 50;
@@ -642,6 +643,11 @@ function render() {
     n.append(x);
     appEl.append(n);
   }
+
+  /* Vorschläge der KI stehen über allem, auf beiden Seiten. Eigener
+     Halter: ein neuer Vorschlag baut nur ihn neu, nicht die Seite. */
+  appEl.append(vorschlagHalter);
+  fuelleVorschlaege();
 
   if (seite === "fluss") renderFluss(d);
   else renderBuchhaltung(d);
@@ -1491,11 +1497,12 @@ const einstellungen = baueEinstellungen({
     einschalten: async () => {
       const ok = await window.blaubuch.confirm({
         title: "KI-Zugriff einschalten",
-        message: "Einer KI erlauben, Blaubuch zu lesen?",
+        message: "Einer KI erlauben, Blaubuch zu lesen und Vorschläge zu machen?",
         detail: "Was die KI abfragt, geht an den Anbieter des Modells. Bei Claude ist das Anthropic. "
           + "Mit einem lokalen Modell bleibt alles auf diesem Rechner.\n\n"
           + "Der Zugriff gilt nur auf diesem Rechner, nur mit dem Zugangsschlüssel und nur, "
-          + "solange Blaubuch entsperrt ist. Ändern kann die KI nichts.",
+          + "solange Blaubuch entsperrt ist. Ändern kann die KI nichts selbst: Sie kann vorschlagen, "
+          + "und du nimmst an oder lehnst ab.",
         confirmLabel: "Einschalten"
       });
       return ok ? window.blaubuch.kiEinschalten() : null;
@@ -1525,6 +1532,94 @@ function zeigeKiMarke(status) {
   kiMarke.classList.toggle("fehler", Boolean(status?.fehler));
 }
 window.blaubuch.kiStatus?.().then(zeigeKiMarke).catch(() => {});
+
+/* ------------------------------------------------------------------ *
+ * Vorschläge der KI — gelten erst, wenn hier jemand zustimmt
+ * ------------------------------------------------------------------ */
+
+let kiVorschlaege = [];
+const vorschlagHalter = el("div", "vorschlaege-halter");
+
+function fuelleVorschlaege() {
+  vorschlagHalter.textContent = "";
+  const offen = kiVorschlaege.filter((v) => v.status === "offen");
+  if (!state || offen.length === 0) return;
+
+  const k = card("Vorschläge der KI", false,
+    "Eine KI hat diese Änderungen vorgeschlagen. Gebucht ist nichts davon, bis du annimmst. "
+    + "Angenommenes lässt sich mit dem Pfeil in der Kopfleiste zurücknehmen.");
+  k.section.classList.add("vorschlaege");
+  k.section.setAttribute("aria-live", "polite");
+
+  for (const v of offen) {
+    const d = beschreibe(v, state);
+    const grund = istVeraltet(v, state);
+    const block = el("article", "vorschlag" + (grund ? " veraltet" : ""));
+    block.append(el("h3", null, d.titel));
+
+    const tabelle = el("dl", "vorschlag-felder");
+    for (const f of d.felder) {
+      tabelle.append(el("dt", null, f.feld));
+      const wert = el("dd");
+      if (f.alt !== null) wert.append(el("s", "alt", f.alt), " → ");
+      wert.append(el("span", "neu", f.neu));
+      tabelle.append(wert);
+    }
+    block.append(tabelle);
+
+    /* Fremder Text: nur als Text, nie als Markup. */
+    const begruendung = el("p", "vorschlag-begruendung");
+    begruendung.append(el("span", "label", "Begründung der KI: "), document.createTextNode(v.begruendung));
+    block.append(begruendung);
+
+    const reihe = el("div", "vorschlag-knoepfe");
+    if (grund) {
+      block.append(el("p", "vorschlag-veraltet", grund + " Der Vorschlag lässt sich nicht mehr annehmen."));
+      reihe.append(vorschlagKnopf("Verwerfen", "btn-tool", () => erledigeVorschlag(v, "veraltet")));
+    } else {
+      reihe.append(
+        vorschlagKnopf("Annehmen", "btn-primary", () => nimmVorschlagAn(v)),
+        vorschlagKnopf("Ablehnen", "btn-tool", () => erledigeVorschlag(v, "abgelehnt"))
+      );
+    }
+    block.append(reihe);
+    k.section.append(block);
+  }
+  vorschlagHalter.append(k.section);
+}
+
+function vorschlagKnopf(text, klasse, beiKlick) {
+  const b = el("button", klasse, text);
+  b.type = "button";
+  b.addEventListener("click", beiKlick);
+  return b;
+}
+
+async function erledigeVorschlag(v, status) {
+  await window.blaubuch.kiVorschlagErledigt?.(v.id, status);
+  announce(status === "abgelehnt" ? "Vorschlag abgelehnt" : "Vorschlag verworfen");
+}
+
+function nimmVorschlagAn(v) {
+  /* Erst jetzt prüfen, nicht beim Anzeigen: dazwischen kann sich etwas getan haben. */
+  const grund = istVeraltet(v, state);
+  if (grund) {
+    showNotice(grund + " Der Vorschlag wurde nicht übernommen.", "warn");
+    void erledigeVorschlag(v, "veraltet");
+    render();
+    return;
+  }
+  const vorher = JSON.stringify(state);
+  const was = wendeAn(v, state);
+  pushUndo("Vorschlag der KI: " + was, vorher);
+  touch();
+  void window.blaubuch.kiVorschlagErledigt?.(v.id, "angenommen");
+  kiVorschlaege = kiVorschlaege.map((x) => (x.id === v.id ? { ...x, status: "angenommen" } : x));
+  announce("Vorschlag angenommen: " + was);
+  render();
+}
+
+window.blaubuch.onKiVorschlaege?.((liste) => { kiVorschlaege = liste; fuelleVorschlaege(); });
 
 /* Gesperrt oder noch nicht geladen: kein Stand. Der Hauptprozess prueft
    den Tresor ebenfalls — doppelt haelt hier besser. */

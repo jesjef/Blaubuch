@@ -11,6 +11,9 @@
  *    Anwender sieht, samt ungespeicherter Änderungen. Kein zweiter Weg zur
  *    Tresordatei.
  *  - Das Abfrageprotokoll lebt nur im Speicher und enthält keine Beträge.
+ *  - Vorschläge der KI (Stufe 2) leben ebenfalls nur im Speicher. Das
+ *    Fenster zeigt sie an und wendet sie an, wenn der Anwender zustimmt;
+ *    hier wird nur die Liste geführt. Sperren und Ausschalten leeren sie.
  */
 
 "use strict";
@@ -26,6 +29,9 @@ const ANTWORT_FRIST_MS = 3000;
 
 let mcpPromise = null;
 const mcp = () => (mcpPromise ??= import(pathToFileURL(path.join(__dirname, "mcp.mjs")).href));
+let vorschlagsPromise = null;
+const vorschlagsModul = () => (vorschlagsPromise ??=
+  import(pathToFileURL(path.join(__dirname, "..", "shared", "vorschlaege.mjs")).href));
 
 const neuerSchluessel = () => randomBytes(32).toString("base64url");
 const gueltigerPort = (p) => Number.isInteger(p) && p >= 1024 && p <= 65535;
@@ -93,6 +99,23 @@ function richteKiZugriffEin({ app, ipcMain, handle, store, fenster, verzeichnis 
     });
   }
 
+  /* ---- Vorschläge ---- */
+
+  /** Wird beim ersten Start geladen — vorher kann keine KI vorschlagen. */
+  let liste = null;
+
+  function meldeVorschlaege() {
+    const w = fenster();
+    if (w && !w.isDestroyed()) w.webContents.send("ki:vorschlaege", liste?.alle() ?? []);
+  }
+
+  /** Vorschläge vergessen — beim Sperren und beim Ausschalten. */
+  function vergiss() {
+    if (!liste?.alle().length) return;
+    liste.leeren();
+    meldeVorschlaege();
+  }
+
   const dienst = {
     name: "blaubuch",
     version: app.getVersion(),
@@ -101,7 +124,13 @@ function richteKiZugriffEin({ app, ipcMain, handle, store, fenster, verzeichnis 
     protokolliere: (e) => {
       protokoll.unshift(e);
       protokoll.length = Math.min(protokoll.length, PROTOKOLL_LAENGE);
-    }
+    },
+    schlageVor: (v) => {
+      const e = liste.hinzufuegen(v);
+      meldeVorschlaege();
+      return e;
+    },
+    vorschlaege: () => liste?.alle() ?? []
   };
 
   /* ---- Server ---- */
@@ -117,6 +146,7 @@ function richteKiZugriffEin({ app, ipcMain, handle, store, fenster, verzeichnis 
     fehler = null;
     if (!einstellung.an) return;
     try {
+      liste ??= new (await vorschlagsModul()).Vorschlagsliste();
       const { starteServer } = await mcp();
       server = await starteServer({ port: einstellung.port, token: einstellung.token, dienst });
     } catch (e) {
@@ -156,7 +186,21 @@ function richteKiZugriffEin({ app, ipcMain, handle, store, fenster, verzeichnis 
     schreibe(einstellung);
     await stoppe();
     fehler = null;
+    vergiss();
     return status();
+  });
+
+  handle("ki:vorschlaege", () => liste?.alle() ?? []);
+
+  /* Das Fenster meldet, was der Anwender entschieden hat. */
+  handle("ki:vorschlag-erledigt", (_ev, { id, status: neu } = {}) => {
+    try {
+      liste?.setzeStatus(String(id), String(neu));
+      meldeVorschlaege();
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
   });
 
   handle("ki:neuer-schluessel", async () => {
@@ -177,7 +221,7 @@ function richteKiZugriffEin({ app, ipcMain, handle, store, fenster, verzeichnis 
 
   app.on("will-quit", () => { void stoppe(); });
 
-  return { starte };
+  return { starte, vergiss, dienst };
 }
 
 module.exports = { richteKiZugriffEin, STANDARD_PORT };

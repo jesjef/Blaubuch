@@ -46,6 +46,9 @@ const MUSTER = [
   { name: "API-Schlüssel", regex: /\b(?:sk-[A-Za-z0-9]{20,}|ghp_[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16})\b/g },
   { name: "Zugangsdaten im Klartext", regex: /\b(?:password|passwort|passphrase|secret|token|api[_-]?key)\s*[:=]\s*["'][^"']{6,}["']/gi },
   { name: "AHV-Nummer", regex: /\b756\.\d{4}\.\d{4}\.\d{2}\b/g },
+  /* Unsichtbare Zeichen, die Code anders aussehen lassen, als er wirkt (Trojan Source):
+     Richtungsumkehr, Nullbreite, BOM mitten im Text. Im Quelltext nur als \u-Escape. */
+  { name: "Unsichtbares Steuerzeichen", regex: /[\u200B-\u200F\u202A-\u202E\u2066-\u2069\uFEFF]/g },
   { name: "Telefonnummer (CH)", regex: /\b(?:\+41|0041|0)[ ]?[1-9]{2}[ ]?\d{3}[ ]?\d{2}[ ]?\d{2}\b/g }
 ];
 

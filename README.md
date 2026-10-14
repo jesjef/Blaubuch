@@ -129,8 +129,16 @@ ein Klick auf die Bezeichnung benennt sie um.
 
 Unter *Einstellungen → KI-Zugriff* lässt sich Blaubuch für eine KI öffnen —
 Claude oder ein lokales Modell, über das *Model Context Protocol* (MCP).
-Die KI kann dann Monate lesen, Analysen und den Monatsbericht abrufen.
-Ändern kann sie in dieser Fassung nichts.
+Die KI kann dann Monate lesen, Analysen und den Monatsbericht abrufen — und
+**Vorschläge** machen: eine neue Zeile, eine Einnahme, eine Änderung an
+einer bestehenden Zeile. Selbst ändern kann sie nichts.
+
+Vorschläge erscheinen oben in Blaubuch als Karte, mit dem, was sich ändert
+(alt → neu), und der Begründung der KI. Erst *Annehmen* bucht; der Pfeil in
+der Kopfleiste nimmt es wieder zurück. Hast du die Zeile inzwischen selbst
+geändert, lässt sich der Vorschlag nicht mehr annehmen. Neue Monate, Konten
+und Löschungen schlägt die KI nicht vor. Beim Sperren verfallen offene
+Vorschläge.
 
 - **Standardmässig aus.**
 - **Was die KI abfragt, geht an den Anbieter des Modells.** Bei Claude ist
@@ -153,8 +161,7 @@ Der Zugangsschlüssel liegt unverschlüsselt in den Programmeinstellungen
 öffnet er nichts, und *Neuer Schlüssel* macht den alten sofort ungültig.
 
 Blaubuch spricht beide Generationen des Protokolls: bis 2025-11-25 mit
-Handshake und ab 2026-07-28 zustandslos. Der Plan dazu, einschliesslich der
-nächsten Stufe (Vorschläge, die erst nach Zustimmung gelten), steht in
+Handshake und ab 2026-07-28 zustandslos. Der Plan dazu steht in
 [docs/1.4.0-plan.md](docs/1.4.0-plan.md).
 
 ## Sicherheit
@@ -219,6 +226,7 @@ src/
               password.mjs  Passwortbewertung (auch Oberfläche)
               seed.mjs      Startzustand einer frischen Installation
               ki.mjs        Werkzeuge für den KI-Zugriff (reine Funktionen)
+              vorschlaege.mjs  Vorschläge der KI: prüfen, anwenden, veraltet?
   main/       main.js       Fenster, Menü, IPC
               mcp.mjs       MCP-Server: Protokoll, HTTP, Abwehr
               ki-zugriff.js KI-Zugriff ein/aus, Schlüssel, Stand aus dem Fenster

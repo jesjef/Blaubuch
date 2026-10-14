@@ -129,7 +129,8 @@ function baueKiBlock(ki) {
   kopf.append(" ", hinweis(
     "Eine KI wie Claude oder ein lokales Modell kann über MCP lesen, was in Blaubuch steht — "
     + "nur auf diesem Rechner (127.0.0.1), nur mit dem Zugangsschlüssel und nur, solange "
-    + "Blaubuch entsperrt ist. Ändern kann sie in dieser Fassung nichts.",
+    + "Blaubuch entsperrt ist. Ändern kann sie nichts selbst — ihre Vorschläge erscheinen oben "
+    + "in Blaubuch und gelten erst, wenn du sie annimmst.",
     "hinweis-ki"));
   const inhalt = el("div", "e-ki-inhalt");
   block.append(kopf, inhalt);

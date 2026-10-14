@@ -70,7 +70,7 @@ handle("vault:create", (_ev, { password, text }) => store.create(String(password
 handle("vault:encrypt-existing", (_ev, password) => store.encryptExisting(String(password ?? "")));
 handle("vault:change-password", (_ev, { alt, neu, sicherungenLoeschen }) =>
   store.changePassword(String(alt ?? ""), String(neu ?? ""), { sicherungenLoeschen: sicherungenLoeschen === true }));
-handle("vault:lock", () => { store.lock(); return { ok: true }; });
+handle("vault:lock", () => { store.lock(); kiZugriff.vergiss(); return { ok: true }; });
 
 /**
  * Vollstaendiges Zuruecksetzen: Tresor, Sicherungen, Zaehler und

@@ -12,22 +12,71 @@ import assert from "node:assert/strict";
 import { totals, kontoSaldo, buildReport, sortedMonths } from "../src/shared/budget.mjs";
 import { jahresDaten, liquiditaet } from "../src/shared/jahr.mjs";
 import { WERKZEUGE, fuehreAus, KiFehler, RESSOURCEN, leseRessource } from "../src/shared/ki.mjs";
+import { Vorschlagsliste } from "../src/shared/vorschlaege.mjs";
 import { beispielState, KONTO_BAR } from "./fixtures.mjs";
 
-const NAMEN = [
+const LESEN = [
   "monate_auflisten", "konten_lesen", "monat_lesen", "analyse",
   "bericht", "jahresueberblick", "liquiditaet"
 ];
+const VORSCHLAGEN = ["zeile_vorschlagen", "einnahme_vorschlagen", "aenderung_vorschlagen", "vorschlaege_status"];
 
-test("es gibt genau die sieben Lese-Werkzeuge aus dem Plan, in fester Reihenfolge", () => {
-  assert.deepEqual(WERKZEUGE.map((w) => w.name), NAMEN);
+/* Stufe 1 hielt hier „genau sieben, alle nur lesend“ fest. Seit Stufe 2
+   kommen die Vorschlagswerkzeuge dazu — sie schreiben nichts in den
+   Stand, aber sie sind nicht nur lesend: Sie legen Vorschläge an. */
+test("sieben Lese- und vier Vorschlagswerkzeuge, in fester Reihenfolge", () => {
+  assert.deepEqual(WERKZEUGE.map((w) => w.name), [...LESEN, ...VORSCHLAGEN]);
   for (const w of WERKZEUGE) {
     assert.equal(typeof w.description, "string");
     assert.ok(w.description.length > 20, w.name + " braucht eine Beschreibung, die eine KI versteht");
     assert.equal(w.inputSchema.type, "object", w.name);
     assert.equal(w.inputSchema.additionalProperties, false, w.name + " nimmt nur bekannte Argumente");
-    assert.equal(w.annotations?.readOnlyHint, true, w.name + " liest nur");
+    assert.equal(w.annotations?.destructiveHint, false, w.name + " zerstört nichts");
   }
+  for (const n of [...LESEN, "vorschlaege_status"]) {
+    assert.equal(WERKZEUGE.find((w) => w.name === n).annotations.readOnlyHint, true, n + " liest nur");
+  }
+});
+
+/* ------------------------------------------------------------------ *
+ * Vorschlagen
+ * ------------------------------------------------------------------ */
+
+const kontext = () => {
+  const liste = new Vorschlagsliste();
+  return { liste, schlageVor: (v) => liste.hinzufuegen(v), vorschlaege: () => liste.alle() };
+};
+
+test("zeile_vorschlagen legt einen Vorschlag an und ändert den Stand nicht", () => {
+  const state = beispielState();
+  const vorher = JSON.stringify(state);
+  const k = kontext();
+  const r = fuehreAus("zeile_vorschlagen", {
+    liste: "ausgaben", name: "Velo-Service", betrag: 89.5, begruendung: "Steht im Kontoauszug."
+  }, state, k);
+  assert.equal(JSON.stringify(state), vorher, "der Stand bleibt unberührt");
+  assert.equal(k.liste.offene().length, 1);
+  assert.equal(r.daten.status, "offen");
+  assert.match(r.daten.hinweis, /Nichts ist geändert/);
+  assert.match(r.daten.beschreibung.titel, /Velo-Service/);
+});
+
+test("aenderung_vorschlagen und einnahme_vorschlagen landen in derselben Liste", () => {
+  const state = beispielState();
+  const k = kontext();
+  const miete = state.months[state.currentMonth].fixkosten[0];
+  fuehreAus("aenderung_vorschlagen", { id: miete.id, betrag: 1450, begruendung: "Neuer Mietvertrag." }, state, k);
+  fuehreAus("einnahme_vorschlagen", { name: "Bonus", betrag: 500, art: "erwerb", begruendung: "Lohnabrechnung." }, state, k);
+  const s = fuehreAus("vorschlaege_status", {}, state, k).daten.vorschlaege;
+  assert.equal(s.length, 2);
+  assert.deepEqual(s.map((x) => x.status), ["offen", "offen"]);
+  assert.match(s[0].titel, /Miete/);
+});
+
+test("ohne Vorschlagsliste gibt es keine Vorschläge, nur einen klaren Fehler", () => {
+  assert.throws(
+    () => fuehreAus("zeile_vorschlagen", { liste: "ausgaben", name: "x", betrag: 1, begruendung: "y" }, beispielState()),
+    KiFehler);
 });
 
 test("monate_auflisten nennt alle Monate und den aktuellen", () => {

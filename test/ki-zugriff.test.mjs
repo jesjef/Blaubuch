@@ -34,16 +34,18 @@ async function aufbau(t, vorher) {
 
   const kanaele = {};
   const beimBeenden = [];
+  const gesendet = [];
+  const fenster = { isDestroyed: () => false, webContents: { send: (k, d) => gesendet.push([k, d]) } };
   const zugriff = richteKiZugriffEin({
     app: { getVersion: () => "0.0.0-test", on: (ev, f) => { if (ev === "will-quit") beimBeenden.push(f); } },
     ipcMain: { on: () => {} },
     handle: (kanal, f) => { kanaele[kanal] = (...args) => f({}, ...args); },
     store: { entsperrt: true },
-    fenster: () => null,
+    fenster: () => fenster,
     verzeichnis: () => ordner
   });
   t.after(async () => { await kanaele["ki:ausschalten"]?.(); });
-  return { zugriff, kanaele, ordner, beenden: () => beimBeenden.forEach((f) => f()) };
+  return { zugriff, kanaele, ordner, gesendet, beenden: () => beimBeenden.forEach((f) => f()) };
 }
 
 const tools = (port, token) => fetch("http://127.0.0.1:" + port + "/mcp", {
@@ -141,4 +143,43 @@ test("das MCP-SDK ist nur Entwicklungsabhängigkeit und wird nirgends im Program
   };
   durch(new URL("../src", import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1"));
   assert.deepEqual(treffer, []);
+});
+
+/* ------------------------------------------------------------------ *
+ * Vorschläge (Stufe 2)
+ * ------------------------------------------------------------------ */
+
+const { beispielState } = await import("./fixtures.mjs");
+const { erstelleVorschlag } = await import("../src/shared/vorschlaege.mjs");
+const vorschlag = () => erstelleVorschlag("zeile",
+  { liste: "ausgaben", name: "Velo", betrag: 10, begruendung: "Test" }, beispielState());
+
+test("ein Vorschlag wird ans Fenster gemeldet und lässt sich dort erledigen", async (t) => {
+  const port = await freierPort();
+  const { zugriff, kanaele, gesendet } = await aufbau(t, { an: false, port });
+  await kanaele["ki:einschalten"]();
+  const e = zugriff.dienst.schlageVor(vorschlag());
+
+  const meldung = gesendet.filter(([k]) => k === "ki:vorschlaege").at(-1);
+  assert.equal(meldung[1].length, 1, "das Fenster erfährt sofort davon");
+  assert.equal((await kanaele["ki:vorschlaege"]())[0].id, e.id);
+
+  const r = await kanaele["ki:vorschlag-erledigt"]({ id: e.id, status: "angenommen" });
+  assert.equal(r.ok, true);
+  assert.equal(zugriff.dienst.vorschlaege()[0].status, "angenommen");
+  const doppelt = await kanaele["ki:vorschlag-erledigt"]({ id: e.id, status: "abgelehnt" });
+  assert.equal(doppelt.ok, false, "erledigt bleibt erledigt");
+});
+
+test("Sperren und Ausschalten leeren die Vorschläge", async (t) => {
+  const port = await freierPort();
+  const { zugriff, kanaele } = await aufbau(t, { an: false, port });
+  await kanaele["ki:einschalten"]();
+  zugriff.dienst.schlageVor(vorschlag());
+  zugriff.vergiss();
+  assert.equal((await kanaele["ki:vorschlaege"]()).length, 0, "nach dem Sperren");
+
+  zugriff.dienst.schlageVor(vorschlag());
+  await kanaele["ki:ausschalten"]();
+  assert.equal((await kanaele["ki:vorschlaege"]()).length, 0, "nach dem Ausschalten");
 });
