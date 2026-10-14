@@ -21,6 +21,7 @@ import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/
 
 import { starteServer, MODERNE_VERSIONEN, AELTERE_VERSIONEN } from "../src/main/mcp.mjs";
 import { WERKZEUGE } from "../src/shared/ki.mjs";
+import { Vorschlagsliste } from "../src/shared/vorschlaege.mjs";
 import { totals } from "../src/shared/budget.mjs";
 import { beispielState } from "./fixtures.mjs";
 
@@ -31,15 +32,18 @@ const MODERN = "2026-07-28";
 async function mitServer(t, lage = {}) {
   const state = beispielState();
   const protokoll = [];
+  const liste = new Vorschlagsliste();
   const dienst = {
     name: "blaubuch", version: "0.0.0-test",
     entsperrt: () => lage.entsperrt ?? true,
     stand: async () => state,
-    protokolliere: (e) => protokoll.push(e)
+    protokolliere: (e) => protokoll.push(e),
+    schlageVor: (v) => liste.hinzufuegen(v),
+    vorschlaege: () => liste.alle()
   };
   const server = await starteServer({ port: 0, token: TOKEN, dienst });
   t.after(() => server.close());
-  return { server, state, protokoll, url: "http://127.0.0.1:" + server.port + "/mcp" };
+  return { server, state, protokoll, liste, url: "http://127.0.0.1:" + server.port + "/mcp" };
 }
 
 async function post(url, body, kopf = {}) {
@@ -308,4 +312,44 @@ test("das Abfrageprotokoll nennt Werkzeug und Monat, nie Beträge", async (t) =>
   }
   assert.equal(protokoll[0].monat, "2026-08");
   assert.equal(protokoll[1].monat, null);
+});
+
+/* ------------------------------------------------------------------ *
+ * Vorschläge (Stufe 2)
+ * ------------------------------------------------------------------ */
+
+test("SDK-Client: ein Vorschlag landet in der Liste, der Stand bleibt unberührt", async (t) => {
+  const { url, state, liste } = await mitServer(t);
+  const vorher = JSON.stringify(state);
+  const client = await sdkClient(t, url);
+  const r = await client.callTool({
+    name: "zeile_vorschlagen",
+    arguments: { liste: "ausgaben", name: "Velo-Service", betrag: 89.5, begruendung: "Steht im Kontoauszug." }
+  });
+  assert.equal(r.isError, undefined, r.content?.[0]?.text);
+  assert.equal(r.structuredContent.status, "offen");
+  assert.equal(liste.offene().length, 1);
+  assert.equal(JSON.stringify(state), vorher, "über das Protokoll ändert sich nichts");
+
+  const s = await client.callTool({ name: "vorschlaege_status", arguments: {} });
+  assert.equal(s.structuredContent.vorschlaege[0].status, "offen");
+});
+
+test("gesperrt: auch Vorschlagen geht nicht", async (t) => {
+  const { url, liste } = await mitServer(t, { entsperrt: false });
+  const r = await sende(url, modern("tools/call", {
+    name: "zeile_vorschlagen", arguments: { liste: "ausgaben", name: "x", betrag: 1, begruendung: "y" }
+  }));
+  assert.equal(r.json.result.isError, true);
+  assert.equal(liste.alle().length, 0);
+});
+
+test("ein fehlerhafter Vorschlag kommt als lesbarer Werkzeugfehler zurück", async (t) => {
+  const { url, liste } = await mitServer(t);
+  const r = await sende(url, modern("tools/call", {
+    name: "zeile_vorschlagen", arguments: { liste: "ausgaben", name: "x", betrag: 1, von: "Postfinance", begruendung: "y" }
+  }));
+  assert.equal(r.json.result.isError, true);
+  assert.match(r.json.result.content[0].text, /Postfinance/);
+  assert.equal(liste.alle().length, 0);
 });

@@ -112,6 +112,7 @@
   if (parameter.has("fassung")) vorlage.version = Number(parameter.get("fassung"));
   let gespeichert = JSON.stringify(vorlage);
 
+  const vorschauKi = { liefere: null, melde: null, liste: [] };
   window.blaubuch = {
     vaultStatus: async () => ({ zustand: "verschluesselt", path: "(Vorschau)", fehlversuche: 0, rest: 10, loeschenNach: 10, warnenAbRest: 5 }),
     unlock: async () => ({ ok: true, text: gespeichert }),
@@ -149,7 +150,16 @@
         kiAusschalten: async () => { ki.an = ki.laeuft = false; return kopie(); },
         kiNeuerSchluessel: async () => { ki.token = crypto.randomUUID(); return kopie(); },
         kiPort: async (p) => { ki.port = p; ki.adresse = "http://127.0.0.1:" + p + "/mcp"; return kopie(); },
-        onKiAnfrage: () => {}
+        /* Die Oberfläche meldet hier, wie sie ihren Stand liefert — die
+           Vorschau nutzt das, um Vorschläge gegen den echten Stand zu bauen. */
+        onKiAnfrage: (liefere) => { vorschauKi.liefere = liefere; },
+        onKiVorschlaege: (h) => { vorschauKi.melde = h; },
+        kiVorschlaege: async () => vorschauKi.liste.slice(),
+        kiVorschlagErledigt: async (id, status) => {
+          vorschauKi.liste = vorschauKi.liste.map((v) => (v.id === id ? { ...v, status } : v));
+          vorschauKi.melde?.(vorschauKi.liste.slice());
+          return { ok: true };
+        }
       };
     })()
   };
@@ -167,6 +177,28 @@
       form.requestSubmit();
     };
     durchlaufen();
+  }
+
+  /* ?vorschlag=1 spielt drei Vorschläge einer KI vor — einer davon mit
+     Markup in der Begründung, das als Text erscheinen muss. */
+  if (parameter.has("vorschlag")) {
+    const { erstelleVorschlag } = await import("../src/shared/vorschlaege.mjs");
+    const warte = () => new Promise((ok) => {
+      const pruefe = () => {
+        const text = vorschauKi.liefere?.();
+        if (text) ok(JSON.parse(text)); else setTimeout(pruefe, 50);
+      };
+      pruefe();
+    });
+    const stand = await warte();
+    const miete = stand.months[stand.currentMonth].fixkosten.find((z) => z.name === "Miete");
+    let n = 1;
+    vorschauKi.liste = [
+      erstelleVorschlag("aenderung", { id: miete.id, betrag: 1395, begruendung: "Die Mietzinsreduktion nach dem gesunkenen Referenzzinssatz gilt ab diesem Monat." }, stand),
+      erstelleVorschlag("zeile", { liste: "ausgaben", name: "Velo-Service", betrag: 89.5, klassifizierung: "Ausgaben", von: "Bargeld", tag: 12, begruendung: "Im Kontoauszug, aber nicht erfasst." }, stand),
+      erstelleVorschlag("einnahme", { name: "Rückerstattung KK", betrag: 120, art: "sonstige", begruendung: "<img src=x onerror=alert(1)> sollte als Text erscheinen." }, stand)
+    ].map((v) => ({ ...v, id: "v" + n++, status: "offen", erstellt: new Date().toISOString() }));
+    vorschauKi.melde?.(vorschauKi.liste.slice());
   }
 </script>
 </body>

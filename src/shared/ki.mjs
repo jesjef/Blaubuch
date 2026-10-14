@@ -1,5 +1,5 @@
 /**
- * Blaubuch — Werkzeuge für den KI-Zugriff (1.4.0, Stufe 1: Lesen).
+ * Blaubuch — Werkzeuge für den KI-Zugriff (1.4.0: Lesen, 1.5.0: Vorschläge).
  *
  * Reine Funktionen auf einem Stand. Kein Electron, kein Netz, kein
  * Dateisystem: Was die KI abfragt, wird mit denselben Funktionen
@@ -17,9 +17,10 @@ import {
   standardKlassen, EINNAHME_ART_TITEL, ZEILEN_LISTEN
 } from "./budget.mjs";
 import { jahre, jahresDaten, liquiditaet } from "./jahr.mjs";
+import { KiFehler, pruefeArgumente } from "./ki-fehler.mjs";
+import { erstelleVorschlag, beschreibe, SCHEMA } from "./vorschlaege.mjs";
 
-/** Ein Fehler, den die KI zu sehen bekommt. Die Meldung muss ihr helfen. */
-export class KiFehler extends Error {}
+export { KiFehler };
 
 /* ------------------------------------------------------------------ *
  * Argumente
@@ -32,29 +33,6 @@ const MONAT = {
 };
 
 const nurMonat = { type: "object", properties: { monat: MONAT }, additionalProperties: false };
-
-/**
- * Prüft Argumente gegen das kleine Schema oben. Bewusst kein allgemeiner
- * JSON-Schema-Prüfer: Die Werkzeuge kennen genau zwei Argumente.
- */
-function pruefeArgumente(werkzeug, args) {
-  if (args === undefined || args === null) return {};
-  if (typeof args !== "object" || Array.isArray(args)) {
-    throw new KiFehler("Argumente müssen ein Objekt sein.");
-  }
-  const erlaubt = Object.keys(werkzeug.inputSchema.properties ?? {});
-  for (const [name, wert] of Object.entries(args)) {
-    if (!erlaubt.includes(name)) {
-      throw new KiFehler("Unbekanntes Argument „" + name + "“. Erlaubt: "
-        + (erlaubt.length ? erlaubt.join(", ") : "keine") + ".");
-    }
-    const schema = werkzeug.inputSchema.properties[name];
-    if (typeof wert !== "string" || !new RegExp(schema.pattern).test(wert)) {
-      throw new KiFehler("„" + name + "“ hat das falsche Format. " + schema.description);
-    }
-  }
-  return args;
-}
 
 function waehleMonat(state, monat) {
   const key = monat ?? state.currentMonth;
@@ -137,6 +115,26 @@ function monatLesen(state, key) {
  * ------------------------------------------------------------------ */
 
 const lesend = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false };
+/* Legt einen Vorschlag an — der Stand bleibt unberührt, bis der Anwender zustimmt. */
+const vorschlagend = { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false };
+
+const HINWEIS_VORSCHLAG = "Nichts ist geändert. Der Vorschlag wartet in Blaubuch auf die Zustimmung "
+  + "des Anwenders. Ob er angenommen wurde, sagt vorschlaege_status.";
+
+function brauchtListe(kontext) {
+  if (!kontext?.schlageVor) throw new KiFehler("Vorschläge sind hier nicht möglich.");
+  return kontext;
+}
+
+/** Gemeinsamer Ablauf der drei Vorschlagswerkzeuge. */
+const schlageVor = (art) => (state, args, kontext) => {
+  const k = brauchtListe(kontext);
+  const v = erstelleVorschlag(art, args, state);
+  const eintrag = k.schlageVor(v);
+  return {
+    daten: { vorschlag: eintrag.id, status: eintrag.status, beschreibung: beschreibe(v, state), hinweis: HINWEIS_VORSCHLAG }
+  };
+};
 
 /**
  * Reihenfolge ist fest: Clients dürfen die Liste zwischenspeichern, und
@@ -275,6 +273,48 @@ export const WERKZEUGE = Object.freeze([
         }
       };
     }
+  },
+  {
+    name: "zeile_vorschlagen",
+    title: "Zeile vorschlagen",
+    description: "Schlägt eine neue Zeile in Fixkosten & Daueraufträge oder Ausgaben vor. Ändert nichts: "
+      + "Der Anwender sieht den Vorschlag mit deiner Begründung in Blaubuch und nimmt ihn an oder lehnt ab. "
+      + "Konten und Klassifizierungen mit Namen aus monat_lesen angeben.",
+    inputSchema: SCHEMA.zeile,
+    annotations: vorschlagend,
+    run: schlageVor("zeile")
+  },
+  {
+    name: "einnahme_vorschlagen",
+    title: "Einnahme vorschlagen",
+    description: "Schlägt eine neue Einnahmezeile vor. Ändert nichts, bis der Anwender zustimmt. "
+      + "Die Art entscheidet die Rechnung: nur erwerb zählt als Einkommen für die Sparquote.",
+    inputSchema: SCHEMA.einnahme,
+    annotations: vorschlagend,
+    run: schlageVor("einnahme")
+  },
+  {
+    name: "aenderung_vorschlagen",
+    title: "Änderung vorschlagen",
+    description: "Schlägt vor, Felder einer bestehenden Zeile zu ändern (Kennung aus monat_lesen). Nur die "
+      + "genannten Felder ändern sich. Ändert der Anwender die Zeile vorher selbst, verfällt der Vorschlag.",
+    inputSchema: SCHEMA.aenderung,
+    annotations: vorschlagend,
+    run: schlageVor("aenderung")
+  },
+  {
+    name: "vorschlaege_status",
+    title: "Stand der Vorschläge",
+    description: "Listet deine Vorschläge mit Stand: offen, angenommen, abgelehnt oder veraltet.",
+    inputSchema: { type: "object", properties: {}, additionalProperties: false },
+    annotations: lesend,
+    run: (state, _args, kontext) => ({
+      daten: {
+        vorschlaege: brauchtListe(kontext).vorschlaege().map((e) => ({
+          id: e.id, status: e.status, titel: beschreibe(e, state).titel, erstellt: e.erstellt
+        }))
+      }
+    })
   }
 ].map((w) => Object.freeze(w)));
 
@@ -282,14 +322,16 @@ export const WERKZEUGE = Object.freeze([
  * Ein Werkzeug ausführen. Ergebnis: `{daten}` für strukturierte Antworten
  * oder `{text}` für Fliesstext. Wirft KiFehler, wenn die KI etwas falsch
  * gefragt hat.
+ *
+ * `kontext` braucht nur, wer vorschlägt: `{schlageVor(v), vorschlaege()}`.
  */
-export function fuehreAus(name, args, state) {
+export function fuehreAus(name, args, state, kontext) {
   const werkzeug = WERKZEUGE.find((w) => w.name === name);
   if (!werkzeug) {
     throw new KiFehler("Das Werkzeug „" + name + "“ gibt es nicht. Vorhanden: "
       + WERKZEUGE.map((w) => w.name).join(", ") + ".");
   }
-  return werkzeug.run(state, pruefeArgumente(werkzeug, args));
+  return werkzeug.run(state, pruefeArgumente(werkzeug.inputSchema, args), kontext);
 }
 
 /* ------------------------------------------------------------------ *
@@ -349,6 +391,13 @@ davon tatsächlich verloren ist* (verloren).
 - **Überschuss** = Erwerb + Sonstige − (Kosten − Ablage).
 - **Sparquote** = Überschuss / Erwerbseinkommen. Bestand, Darlehen und
   Zuflüsse aus ausgeblendeten Konten heben sie nicht.
+
+## Vorschläge
+Du kannst Zeilen, Einnahmen und Änderungen vorschlagen — nicht selbst
+buchen. Der Anwender sieht jeden Vorschlag mit deiner Begründung und nimmt
+ihn an oder lehnt ab. Ändert er die betroffene Zeile vorher selbst, verfällt
+der Vorschlag. Neue Monate, neue Konten und Löschungen sind keine
+Vorschläge; das macht der Anwender selbst.
 
 ## Grenzen
 Blaubuch ist Buchhaltung: erfassen, ordnen, aufsummieren. Es rechnet nicht

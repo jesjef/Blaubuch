@@ -77,6 +77,17 @@ contextBridge.exposeInMainWorld("blaubuch", {
   kiNeuerSchluessel: () => ipcRenderer.invoke("ki:neuer-schluessel"),
   kiPort: (port) => ipcRenderer.invoke("ki:port", port),
 
+  /** Vorschläge der KI — lesen und melden, was der Anwender entschieden hat. */
+  kiVorschlaege: () => ipcRenderer.invoke("ki:vorschlaege"),
+  kiVorschlagErledigt: (id, status) => ipcRenderer.invoke("ki:vorschlag-erledigt", { id, status }),
+
+  /** Neue oder geänderte Vorschläge. Nur eine Anmeldung. */
+  onKiVorschlaege: (handler) => {
+    ipcRenderer.removeAllListeners("ki:vorschlaege");
+    if (typeof handler !== "function") return;
+    ipcRenderer.on("ki:vorschlaege", (_ev, liste) => handler(Array.isArray(liste) ? liste : []));
+  },
+
   /**
    * Der Hauptprozess fragt nach dem aktuellen Stand, wenn eine KI liest.
    * `liefere` gibt den Stand als JSON-Text zurück — oder null, solange

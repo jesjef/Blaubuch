@@ -1090,3 +1090,29 @@ body.gated main { padding-top: var(--sp-6); }
 @media (prefers-reduced-motion: no-preference) {
   .limitbar > i, .brow .bar i { transition: width 0.35s ease; }
 }
+
+/* ------------------------------------------------------------------ *
+ * Vorschläge der KI
+ * ------------------------------------------------------------------ */
+
+.vorschlaege-halter:empty { display: none; }
+section.card.vorschlaege { border-color: var(--blue-line); border-left: 4px solid var(--blue); }
+.vorschlag { display: grid; gap: var(--sp-2); padding: var(--sp-3) 0; }
+.vorschlag + .vorschlag { border-top: 1px dashed var(--line); }
+.vorschlag h3 { font-family: var(--body); font-size: var(--text-sm); font-weight: 600; }
+.vorschlag-felder {
+  display: grid; grid-template-columns: max-content 1fr; gap: 2px var(--sp-3);
+  margin: 0; font-size: var(--text-sm); font-variant-numeric: tabular-nums;
+}
+.vorschlag-felder dt { color: var(--ink-mute); }
+.vorschlag-felder dd { margin: 0; overflow-wrap: anywhere; }
+.vorschlag-felder .alt { color: var(--ink-mute); }
+.vorschlag-felder .neu { font-weight: 600; }
+.vorschlag-begruendung {
+  margin: 0; font-size: var(--text-sm); padding: var(--sp-2) var(--sp-3);
+  background: var(--field); border-radius: var(--r-sm); overflow-wrap: anywhere;
+}
+.vorschlag-begruendung .label { color: var(--ink-mute); }
+.vorschlag-veraltet { margin: 0; font-size: var(--text-sm); color: var(--rot); }
+.vorschlag.veraltet h3, .vorschlag.veraltet .vorschlag-felder { opacity: 0.6; }
+.vorschlag-knoepfe { display: flex; gap: var(--sp-2); flex-wrap: wrap; }
