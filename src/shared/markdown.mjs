@@ -15,7 +15,7 @@
 
 import {
   totals, kontoSaldo, formatCHF, parseAmount, monthLabel, sortedMonths,
-  istUmbuchung, klasseVon, standardKlassen,
+  kontoLage, buchungsArt, klasseVon, standardKlassen,
   ZEILEN_LISTEN, EINNAHME_ART_TITEL, KEIN_LIMIT
 } from "./budget.mjs";
 
@@ -42,10 +42,20 @@ const tabelle = (kopf, zeilen) => {
  * @param {object} state
  * @returns {string}
  */
+/** Spalte „Nach“: wohin das Geld geht, und ob es im Sichtbaren bleibt. */
+function nachSpalte(z, art, kontoName) {
+  if (art === "umbuchung") return kontoName(z.nachKonto) + " (Umbuchung)";
+  if (art === "ablage" || (art === "aussen" && z.nachKonto)) {
+    return kontoName(z.nachKonto) + " (ausgeblendet)";
+  }
+  if (art === "zufluss") return kontoName(z.nachKonto) + " (aus ausgeblendetem Konto)";
+  return "extern";
+}
+
 export function buildMarkdown(state) {
   const klassen = state?.klassen ?? standardKlassen();
   const konten = state?.konten ?? [];
-  const kontoIds = new Set(konten.map((k) => k.id));
+  const lage = kontoLage(state);
   const kontoName = (id) => konten.find((k) => k.id === id)?.name ?? "unbekannt";
   const keys = sortedMonths(state ?? { months: {} });
 
@@ -129,7 +139,7 @@ export function buildMarkdown(state) {
           formatCHF(parseAmount(z.betrag)),
           klasseVon(klassen, z.klasse).name,
           kontoName(z.vonKonto),
-          istUmbuchung(z, kontoIds) ? kontoName(z.nachKonto) + " (Umbuchung)" : "extern",
+          nachSpalte(z, buchungsArt(z, lage), kontoName),
           z.faelligAm ? z.faelligAm + "." : "",
           z.laeuftBis ?? "",
           z.notiz ?? ""

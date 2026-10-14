@@ -28,7 +28,7 @@
 
 import {
   totals, parseAmount, toRappen, monthLabel, sortedMonths,
-  alleZeilen, istUmbuchung, standardKlassen, klasseVon
+  alleZeilen, kontoLage, buchungsArt, standardKlassen, klasseVon
 } from "./budget.mjs";
 
 const rund = (n) => Math.round(n * 100) / 100;
@@ -197,7 +197,7 @@ export function jahresLayout(daten, mass = {}) {
  */
 export function liquiditaet(state, month) {
   const klassen = state?.klassen ?? standardKlassen();
-  const kontoIds = new Set((state?.konten ?? []).map((k) => k.id));
+  const lage = kontoLage(state);
   const t = totals(state, month);
 
   /* Tag 1..31, Index 0 bleibt leer. */
@@ -214,21 +214,24 @@ export function liquiditaet(state, month) {
   };
 
   for (const e of month?.einnahmen ?? []) {
-    if (!e || e.aktiv === false || e.art === "durchlauf") continue;
+    if (!e || e.aktiv === false || e.art === "durchlauf" || !lage.zaehlt(e.konto)) continue;
     buche(e.faelligAm, parseAmount(e.betrag));
   }
 
   for (const z of alleZeilen(month)) {
     if (!z || z.aktiv === false) continue;
     if (klasseVon(klassen, z.klasse).wirkung === "durchlauf") continue;
-    /* Eine Umbuchung wechselt nur das Konto — die Gesamtlage bleibt. */
-    if (istUmbuchung(z, kontoIds)) continue;
-    buche(z.faelligAm, -parseAmount(z.betrag));
+    /* Eine Umbuchung wechselt nur das Konto — die Gesamtlage bleibt.
+       Ausgeblendete Konten zaehlen wie in totals() nicht mit. */
+    const art = buchungsArt(z, lage);
+    if (art === "umbuchung" || art === "aussen") continue;
+    buche(z.faelligAm, art === "zufluss" ? parseAmount(z.betrag) : -parseAmount(z.betrag));
   }
 
   /* Karten tragen keinen Tag; sie zählen wie alles Undatierte an den Anfang. */
   for (const k of month?.kreditkarten ?? []) {
-    buche(null, -parseAmount(k?.betrag));
+    if (!k || !lage.zaehlt(k.vonKonto)) continue;
+    buche(null, -parseAmount(k.betrag));
   }
 
   if (!bewegt) {

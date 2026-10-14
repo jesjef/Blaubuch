@@ -8,14 +8,15 @@
  * **Die Untersummen ergeben zusammen genau die Summe im Kartenkopf.**
  *
  * Deshalb gelten hier dieselben Regeln wie in `totals()`: Durchlaufgeld,
- * pausierte Zeilen und Umbuchungen zählen nicht mit. Sie verschwinden
+ * pausierte Zeilen, Umbuchungen und was nur ausgeblendete Konten berührt
+ * oder von dort kommt, zählen nicht mit. Sie verschwinden
  * aber nicht — sie stehen weiter in ihrer Gruppe, und `ausgenommen`
  * sagt, wie viele es sind. Wegzulassen, was nicht zählt, würde eine
  * Zeile unsichtbar machen, die der Benutzer selbst erfasst hat.
  */
 
 import {
-  parseAmount, toRappen, istUmbuchung, klasseVon, standardKlassen
+  parseAmount, toRappen, kontoLage, buchungsArt, klasseVon, standardKlassen
 } from "./budget.mjs";
 
 /**
@@ -30,7 +31,7 @@ import {
  */
 export function gruppen(state, month, liste) {
   const klassen = state?.klassen ?? standardKlassen();
-  const kontoIds = new Set((state?.konten ?? []).map((k) => k.id));
+  const lage = kontoLage(state);
   const zeilen = month?.[liste] ?? [];
 
   const nach = new Map();
@@ -46,10 +47,11 @@ export function gruppen(state, month, liste) {
     const gruppe = nach.get(klasse.id);
     gruppe.zeilen.push(z);
 
-    /* Dieselben drei Ausnahmen wie in totals() — Wort für Wort. */
+    /* Dieselben Ausnahmen wie in totals() — Wort für Wort. */
+    const art = buchungsArt(z, lage);
     const zaehlt = z.aktiv !== false
       && klasse.wirkung !== "durchlauf"
-      && !istUmbuchung(z, kontoIds);
+      && (art === "kosten" || art === "ablage");
 
     if (zaehlt) gruppe.summe = toRappen(gruppe.summe + parseAmount(z.betrag));
     else gruppe.ausgenommen += 1;

@@ -186,6 +186,43 @@ export function istUmbuchung(zeile, kontoIds) {
 }
 
 /**
+ * Welche Konten zaehlen. Ein ausgeblendetes Konto (`aktiv: false`) steht
+ * ausserhalb des sichtbaren Geldes — sein Bestand ebenso wie alles, was
+ * darauf oder davon gebucht wird.
+ *
+ * Ein Konto, das es gar nicht gibt, gilt als sichtbar: im Zweifel zaehlt
+ * eine Buchung, statt still zu verschwinden.
+ */
+export function kontoLage(state) {
+  const konten = (state?.konten ?? []).filter(Boolean);
+  const kontoIds = new Set(konten.map((k) => k.id));
+  const ausgeblendet = new Set(konten.filter((k) => k.aktiv === false).map((k) => k.id));
+  return { kontoIds, zaehlt: (id) => !ausgeblendet.has(id) };
+}
+
+/**
+ * Wie eine Buchungszeile das sichtbare Geld bewegt:
+ *
+ *   "umbuchung"  sichtbar → sichtbar         keine Kosten, Summe bleibt
+ *   "kosten"     sichtbar → extern           Kosten nach Klassifizierung
+ *   "ablage"     sichtbar → ausgeblendet     Kosten nach Klassifizierung,
+ *                                            aber eigenes Geld (Sparquote)
+ *   "zufluss"    ausgeblendet → sichtbar     erhoeht die Mittel, kein Einkommen
+ *   "aussen"     beruehrt nur Ausgeblendetes zaehlt nirgends
+ *
+ * Bis 1.3.1 kannte totals() nur Umbuchung und Kosten und pruefte gegen ALLE
+ * Konten — eine Ablage aufs ausgeblendete Sparkonto verschwand dadurch
+ * aus der Rechnung (Fehlerbericht Niklas, 2026-10-14).
+ */
+export function buchungsArt(zeile, lage) {
+  const vonSichtbar = lage.zaehlt(zeile?.vonKonto);
+  const umbuchung = istUmbuchung(zeile, lage.kontoIds);
+  const nachSichtbar = umbuchung && lage.zaehlt(zeile.nachKonto);
+  if (vonSichtbar) return nachSichtbar ? "umbuchung" : umbuchung ? "ablage" : "kosten";
+  return nachSichtbar ? "zufluss" : "aussen";
+}
+
+/**
  * Saldo eines Kontos am Monatsende.
  *
  *   Anfangsbestand + Eingaenge − Ausgaenge ± Umbuchungen
@@ -246,7 +283,7 @@ export function kontoSaldo(state, month, kontoId) {
 export function totals(state, month) {
   const klassen = state?.klassen ?? standardKlassen();
   const konten = aktiveKonten(state);
-  const kontoIds = new Set((state?.konten ?? []).map((k) => k.id));
+  const lage = kontoLage(state);
 
   const bestand = toRappen(
     konten.reduce((s, k) => s + parseAmount(month?.anfangsbestaende?.[k.id]), 0)
@@ -254,20 +291,19 @@ export function totals(state, month) {
 
   let erwerb = 0, geliehen = 0, sonstige = 0, durchlauf = 0;
   for (const e of month?.einnahmen ?? []) {
-    if (!e || e.aktiv === false) continue;
+    if (!e || e.aktiv === false || !lage.zaehlt(e.konto)) continue;
     const betrag = parseAmount(e.betrag);
     if (e.art === "erwerb") erwerb += betrag;
     else if (e.art === "geliehen") geliehen += betrag;
     else if (e.art === "durchlauf") durchlauf += betrag;
     else sonstige += betrag;
   }
-  const einnahmen = toRappen(bestand + erwerb + geliehen + sonstige);
-
   const byKlasse = {};
   for (const k of klassen) byKlasse[k.id] = 0;
 
   const bloecke = { fixkosten: 0, ausgaben: 0 };
   let umgebucht = 0;
+  let zufluss = 0, abgelegt = 0;
 
   for (const liste of ZEILEN_LISTEN) {
     for (const z of month?.[liste] ?? []) {
@@ -279,14 +315,20 @@ export function totals(state, month) {
          noch Umbuchung, es gehoert dem Anwender schlicht nicht. */
       if (klasse.wirkung === "durchlauf") { durchlauf += betrag; continue; }
 
-      if (istUmbuchung(z, kontoIds)) { umgebucht = toRappen(umgebucht + betrag); continue; }
+      const art = buchungsArt(z, lage);
+      if (art === "aussen") continue;
+      if (art === "umbuchung") { umgebucht = toRappen(umgebucht + betrag); continue; }
+      if (art === "zufluss") { zufluss = toRappen(zufluss + betrag); continue; }
+      if (art === "ablage") abgelegt = toRappen(abgelegt + betrag);
 
       bloecke[liste] = toRappen(bloecke[liste] + betrag);
       byKlasse[klasse.id] = toRappen((byKlasse[klasse.id] ?? 0) + betrag);
     }
   }
 
-  const kk = toRappen((month?.kreditkarten ?? []).reduce((s, k) => s + parseAmount(k?.betrag), 0));
+  const kk = toRappen((month?.kreditkarten ?? [])
+    .filter((k) => k && lage.zaehlt(k.vonKonto))
+    .reduce((s, k) => s + parseAmount(k.betrag), 0));
   /* Der Kartensaldo traegt kein eigenes Etikett und zaehlt als Ausgabe. */
   const standard = klasseVon(klassen, STANDARD_KLASSE);
   byKlasse[standard.id] = toRappen((byKlasse[standard.id] ?? 0) + kk);
@@ -299,13 +341,18 @@ export function totals(state, month) {
     klassen.filter((k) => k.wirkung === "verloren").reduce((s, k) => s + (byKlasse[k.id] ?? 0), 0)
   );
 
+  /* Erst nach den Zeilen: ein Zufluss aus einem ausgeblendeten Konto
+     erhoeht die Mittel. */
+  const einnahmen = toRappen(bestand + erwerb + geliehen + sonstige + zufluss);
   const rest = toRappen(einnahmen - kosten);
-  const ueberschuss = toRappen(erwerb + sonstige - kosten);
+  /* Was ins Ausgeblendete abgelegt wird, ist gespart, nicht ausgegeben.
+     Was von dort kommt, ist kein Einkommen — `zufluss` fehlt hier bewusst. */
+  const ueberschuss = toRappen(erwerb + sonstige - (kosten - abgelegt));
 
   return {
-    bestand, erwerb, geliehen, sonstige, einnahmen,
+    bestand, erwerb, geliehen, sonstige, zufluss, einnahmen,
     fix, kk, re, kosten, rest, ueberschuss,
-    umgebucht, durchlauf: toRappen(durchlauf),
+    umgebucht, abgelegt, durchlauf: toRappen(durchlauf),
     byKlasse, verloren,
     /* Was ausgegeben, aber nicht verloren ist: angelegt oder gespart. */
     angelegt: toRappen(kosten - verloren),
@@ -703,6 +750,21 @@ export function buildInsights(state, monthKey) {
     });
   }
 
+  /* Ausgeblendete Konten: was dorthin geht, ist fuer den Restwert weg —
+     aber gespart, nicht verloren. Was von dort kommt, ist kein Einkommen. */
+  if (t.abgelegt > 0 || t.zufluss > 0) {
+    const parts = [];
+    if (t.abgelegt > 0) {
+      parts.push("Auf ausgeblendete Konten gebucht: ", { b: formatCHF(t.abgelegt) },
+        " — zählt im Restwert als weg, in der Sparquote als gespart.");
+    }
+    if (t.zufluss > 0) {
+      parts.push((parts.length ? " " : "") + "Aus ausgeblendeten Konten geholt: ", { b: formatCHF(t.zufluss) },
+        " — erhöht die Mittel, ist aber kein Einkommen.");
+    }
+    out.push({ parts });
+  }
+
   if (t.durchlauf > 0) {
     out.push({
       parts: [
@@ -785,7 +847,7 @@ export function buildReport(state, monthKey) {
   const month = state.months[monthKey];
   const klassen = state.klassen ?? standardKlassen();
   const konten = state.konten ?? [];
-  const kontoIds = new Set(konten.map((k) => k.id));
+  const lage = kontoLage(state);
   const kontoName = (id) => konten.find((k) => k.id === id)?.name ?? "unbekannt";
   const t = totals(state, month);
   const L = [];
@@ -822,7 +884,11 @@ export function buildReport(state, monthKey) {
     for (const z of zeilen) {
       if (!parseAmount(z.betrag)) continue;
       const teile = [klasseVon(klassen, z.klasse).name];
-      if (istUmbuchung(z, kontoIds)) teile.push("Umbuchung → " + kontoName(z.nachKonto) + ", keine Kosten");
+      const art = buchungsArt(z, lage);
+      if (art === "umbuchung") teile.push("Umbuchung → " + kontoName(z.nachKonto) + ", keine Kosten");
+      if (art === "ablage") teile.push("→ " + kontoName(z.nachKonto) + " (ausgeblendet), zählt als Kosten");
+      if (art === "zufluss") teile.push("aus " + kontoName(z.vonKonto) + " (ausgeblendet), zählt als Zufluss");
+      if (art === "aussen") teile.push("nur ausgeblendete Konten, zählt nicht");
       if (z.faelligAm) teile.push("am " + z.faelligAm + ".");
       if (z.aktiv === false) teile.push("pausiert");
       L.push("- " + z.name + ": " + formatCHF(parseAmount(z.betrag)) + " [" + teile.join(", ") + "]");
