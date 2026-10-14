@@ -8,7 +8,7 @@
 
 import {
   SCHEMA_VERSION, EINNAHME_ARTEN, EINNAHME_ART_TITEL,
-  formatCHF, parseAmount, monthLabel, isMonthKey, nextMonthKey, sortedMonths,
+  formatCHF, parseAmount, monthLabel, monatsbeginn, isMonthKey, nextMonthKey, sortedMonths,
   totals, buildInsights, buildReport, migrate, monthFromPrevious, uid, nachbarMonat,
   kontoSaldo, kontoLage, buchungsArt, leseFaelligAm,
   STANDARD_KLASSE, WIRKUNG_TITEL, WIRKUNGEN, klasseVon, FARB_KEYS, farbe
@@ -151,6 +151,9 @@ function showNotice(text, kind) {
 /* ------------------------------------------------------------------ *
  * Bausteine
  * ------------------------------------------------------------------ */
+
+/** Bezeichnung eines Monats — mit Monatsbeginn 25 der Zeitraum. */
+const monatsName = (key) => monthLabel(key, monatsbeginn(state));
 
 function el(tag, cls, text) {
   const n = document.createElement(tag);
@@ -625,7 +628,7 @@ function render() {
   for (const key of keys) {
     const o = document.createElement("option");
     o.value = key;
-    o.textContent = monthLabel(key);
+    o.textContent = monatsName(key);
     o.selected = key === state.currentMonth;
     monthSelect.append(o);
   }
@@ -673,7 +676,7 @@ function renderBuchhaltung(d) {
   refs.box3 = s3;
   refs.v3 = el("div", "value");
   refs.sub3 = el("div", "sub");
-  s3.append(el("div", "label", "Restwert " + monthLabel(state.currentMonth)), refs.v3, refs.sub3);
+  s3.append(el("div", "label", "Restwert " + monatsName(state.currentMonth)), refs.v3, refs.sub3);
 
   summary.append(s1, s2, s3);
   appEl.append(summary);
@@ -1492,6 +1495,18 @@ const einstellungen = baueEinstellungen({
   kontoZuruecksetzen: () => kontoZuruecksetzen(),
   beiSperrzeit: () => sperrWaechter.neuLesen(),
   monatLoeschen: () => monatLoeschen(),
+  monatsbeginn: {
+    lesen: () => monatsbeginn(state),
+    vorschau: (beginn) => monthLabel(state.currentMonth, beginn),
+    setzen: (beginn) => {
+      if (beginn === monatsbeginn(state)) return;
+      pushUndo("Monatsbeginn geändert");
+      state.monatsbeginn = beginn;
+      touch();
+      render();
+      announce("Monatsbeginn: " + beginn + ". — " + monatsName(state.currentMonth));
+    }
+  },
   ki: window.blaubuch.kiStatus ? {
     status: () => window.blaubuch.kiStatus(),
     einschalten: async () => {
@@ -1784,7 +1799,7 @@ function gotoMonth(key) {
   state.currentMonth = key;
   touch();
   render();
-  announce(monthLabel(key) + " geöffnet");
+  announce(monatsName(key) + " geöffnet");
 }
 
 function stepMonth(richtung) {
@@ -1797,10 +1812,10 @@ function anlegen(key) {
   if (!isMonthKey(key)) return;
   if (state.months[key]) {
     gotoMonth(key);
-    showNotice(monthLabel(key) + " gibt es schon — geöffnet.");
+    showNotice(monatsName(key) + " gibt es schon — geöffnet.");
     return;
   }
-  pushUndo("Monat " + monthLabel(key) + " angelegt");
+  pushUndo("Monat " + monatsName(key) + " angelegt");
   const keys = sortedMonths(state);
   state.months[key] = monthFromPrevious(state.months[keys[keys.length - 1]], key, state);
   state.currentMonth = key;
@@ -1818,18 +1833,18 @@ async function monatLoeschen() {
   const key = state.currentMonth;
   const ok = await window.blaubuch.confirm({
     title: "Monat löschen",
-    message: monthLabel(key) + " löschen?",
+    message: monatsName(key) + " löschen?",
     detail: "Alle Werte dieses Monats werden entfernt. Rückgängig machen geht danach noch über den Pfeil in der Kopfleiste.",
     confirmLabel: "Löschen"
   });
   if (!ok) return;
 
-  pushUndo("Monat " + monthLabel(key) + " gelöscht");
+  pushUndo("Monat " + monatsName(key) + " gelöscht");
   delete state.months[key];
   state.currentMonth = nachbarMonat(keys, key);
   touch();
   render();
-  announce(monthLabel(key) + " gelöscht");
+  announce(monatsName(key) + " gelöscht");
 }
 
 /* ------------------------------------------------------------------ *
@@ -2034,7 +2049,7 @@ async function boot() {
     render();
     markClean("Angelegt");
     showNotice("Blaubuch ist eingerichtet. Trage deine Zahlen für "
-      + monthLabel(state.currentMonth) + " ein — gespeichert wird verschlüsselt unter "
+      + monatsName(state.currentMonth) + " ein — gespeichert wird verschlüsselt unter "
       + (appInfo?.dataPath ?? "deinem Benutzerordner") + ".");
     return;
   }

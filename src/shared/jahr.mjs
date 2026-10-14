@@ -30,6 +30,7 @@ import {
   totals, parseAmount, toRappen, monthLabel, sortedMonths,
   alleZeilen, kontoLage, buchungsArt, standardKlassen, klasseVon
 } from "./budget.mjs";
+import { monatsbeginn, tagesfolge } from "./periode.mjs";
 
 const rund = (n) => Math.round(n * 100) / 100;
 
@@ -69,7 +70,7 @@ export function jahresDaten(state, jahr) {
 
     return {
       key,
-      label: monthLabel(key),
+      label: monthLabel(key, monatsbeginn(state)),
       kurz: monthLabel(key).slice(0, 3),
       einnahmen: t.einnahmen,
       kosten: t.kosten,
@@ -200,14 +201,17 @@ export function liquiditaet(state, month) {
   const lage = kontoLage(state);
   const t = totals(state, month);
 
-  /* Tag 1..31, Index 0 bleibt leer. */
+  /* Tag 1..31, Index 0 bleibt leer. Gelaufen wird in der Reihenfolge der
+     Periode: mit Beginn 25 kommt der 25. vor dem 1. */
+  const folge = tagesfolge(monatsbeginn(state));
   const bewegung = new Array(TAGE_IM_MONAT + 1).fill(0);
   let ohneTag = 0;
   let bewegt = false;
 
   const buche = (tag, betrag) => {
     if (betrag === 0) return;
-    const ziel = tag ?? 1;
+    /* Undatiertes zaehlt am ersten Tag der Periode. */
+    const ziel = tag ?? folge[0];
     if (tag == null) ohneTag += 1;
     bewegung[ziel] = toRappen(bewegung[ziel] + betrag);
     bewegt = true;
@@ -241,7 +245,7 @@ export function liquiditaet(state, month) {
   let stand = t.bestand;
   const punkte = [];
   let tiefster = null;
-  for (let tag = 1; tag <= TAGE_IM_MONAT; tag++) {
+  for (const tag of folge) {
     stand = toRappen(stand + bewegung[tag]);
     punkte.push({ tag, stand });
     if (!tiefster || stand < tiefster.stand) tiefster = { tag, stand };

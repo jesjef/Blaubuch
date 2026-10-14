@@ -1006,6 +1006,14 @@ rect.k-inaktiv, text.k-inaktiv { opacity: 0.45; }
   border-radius: var(--r-sm); padding: 0.35rem 0.5rem; font: inherit; font-size: var(--text-sm);
 }
 .e-ki-schluessel input { flex: 1; min-width: 0; font-family: ui-monospace, monospace; }
+
+/* Monatsbeginn */
+.e-beginn { display: flex; align-items: center; gap: var(--sp-2); font-size: var(--text-sm); }
+.e-beginn select {
+  border: 1px solid var(--line); background: var(--field); color: var(--ink);
+  border-radius: var(--r-sm); padding: 0.35rem 0.5rem; font: inherit; font-size: var(--text-sm);
+}
+.e-beginn select:focus-visible { outline: 2px solid var(--blue); outline-offset: 1px; }
 .e-ki-port { display: flex; align-items: center; gap: var(--sp-2); font-size: var(--text-sm); }
 .e-ki-port input { width: 6.5rem; }
 .e-ki-inhalt h4 {
