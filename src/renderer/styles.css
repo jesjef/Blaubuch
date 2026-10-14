@@ -429,6 +429,9 @@ section.card header .total {
   border-radius: var(--r-sm); padding: var(--sp-2) var(--sp-3);
   font-size: var(--text-xs); font-weight: 400; line-height: 1.45;
   white-space: normal; text-align: left;
+  /* Steht die Marke in einer Überschrift, erbt die Blase sonst deren
+     Grossbuchstaben und Sperrung. */
+  text-transform: none; letter-spacing: normal;
   opacity: 0; visibility: hidden; transition: opacity 0.12s ease;
   box-shadow: 0 4px 12px rgb(0 0 0 / 0.2);
 }
@@ -444,6 +447,10 @@ section.card header .total {
 /* Am rechten Rand würde die Blase sonst aus der Karte laufen. */
 section.card:last-child .hinweis-blase,
 .sections > .card:nth-child(3n) .hinweis-blase { left: auto; right: 0; transform: none; }
+
+/* In den Einstellungen stehen die Marken nahe am linken Rand: mittig
+   ausgerichtet liefe die Blase links aus dem Dialog. */
+.einstellungen .hinweis-blase { left: 0; transform: none; max-width: 22rem; }
 
 /* ------------------------------------------------------------------ *
  * Zeilen — dieselbe Grammatik in jeder Karte:
@@ -947,7 +954,7 @@ rect.k-inaktiv, text.k-inaktiv { opacity: 0.45; }
 .einstellungen {
   border: 1px solid var(--line); border-radius: var(--r-lg);
   background: var(--card); color: var(--ink);
-  padding: 0; max-width: 34rem; width: calc(100vw - 2 * var(--sp-4));
+  padding: 0; max-width: 46rem; width: calc(100vw - 2 * var(--sp-4));
   max-height: calc(100vh - 2 * var(--sp-5));
   box-shadow: 0 12px 32px rgb(0 0 0 / 0.18);
 }
