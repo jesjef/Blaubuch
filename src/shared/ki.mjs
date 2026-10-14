@@ -17,6 +17,7 @@ import {
   standardKlassen, EINNAHME_ART_TITEL, ZEILEN_LISTEN
 } from "./budget.mjs";
 import { jahre, jahresDaten, liquiditaet } from "./jahr.mjs";
+import { monatsbeginn, zeitraum } from "./periode.mjs";
 import { KiFehler, pruefeArgumente } from "./ki-fehler.mjs";
 import { erstelleVorschlag, beschreibe, SCHEMA } from "./vorschlaege.mjs";
 
@@ -76,7 +77,8 @@ function monatLesen(state, key) {
 
   const daten = {
     monat: key,
-    bezeichnung: monthLabel(key),
+    bezeichnung: monthLabel(key, monatsbeginn(state)),
+    zeitraum: zeitraum(key, monatsbeginn(state)),
     einnahmen: (month.einnahmen ?? []).map((e) => ({
       id: e.id,
       name: e.name,
@@ -151,7 +153,11 @@ export const WERKZEUGE = Object.freeze([
     run: (state) => ({
       daten: {
         aktuell: state.currentMonth,
-        monate: sortedMonths(state).map((key) => ({ key, bezeichnung: monthLabel(key) }))
+        monate: sortedMonths(state).map((key) => ({
+          key,
+          bezeichnung: monthLabel(key, monatsbeginn(state)),
+          zeitraum: zeitraum(key, monatsbeginn(state))
+        }))
       }
     })
   },
@@ -341,6 +347,14 @@ export function fuehreAus(name, args, state, kontext) {
 const DATENMODELL = `# Blaubuch — wie gerechnet wird
 
 Blaubuch ist ein Monatsbudget in Schweizer Franken. Alle Beträge in CHF.
+
+## Monate
+Ein Monat muss nicht am 1. beginnen. Der Anwender legt in den Einstellungen
+einen Monatsbeginn fest (1.–28.). Der Schlüssel „JJJJ-MM“ meint den Monat,
+in dem der Zeitraum beginnt: „2026-10“ mit Beginn 25 ist der 25. Oktober
+bis und mit 24. November 2026. Das Feld \`zeitraum\` nennt beide Daten.
+Ein \`tag\` an einer Zeile ist ein Kalendertag in diesem Zeitraum — mit
+Beginn 25 liegt Tag 3 im November.
 
 ## Konten
 Konten sind eigene Konten (Lohnkonto, Sparkonto, Bargeld …). Jedes hat je

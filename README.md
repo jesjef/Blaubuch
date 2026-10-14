@@ -119,6 +119,12 @@ Der Schalter oben rechts wechselt zwischen **System**, **hell** und **dunkel**;
 das Zahnrad daneben öffnet die Einstellungen mit Farbwahl, Datei- und
 Tresoraktionen.
 
+Ein Monat muss nicht am 1. beginnen. Wer den Lohn am 25. bekommt, stellt
+unter *Einstellungen → Monatsbeginn* den 25. ein: Der Monat läuft dann vom
+25. bis und mit dem 24. des Folgemonats und heisst nach seinem Zeitraum,
+etwa „25. Okt – 24. Nov | 2026“. Die Buchungen bleiben, wo sie sind; der
+Liquiditätsverlauf beginnt am 25.
+
 Ein Betrag von `0` bedeutet: läuft diesen Monat nicht und wird nicht
 abgezogen. Zeilen müssen dafür nicht gelöscht werden.
 

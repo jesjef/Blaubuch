@@ -112,6 +112,64 @@ function knopf(text, beiKlick, klasse = "btn-tool") {
 }
 
 /* ------------------------------------------------------------------ *
+ * Monatsbeginn
+ * ------------------------------------------------------------------ */
+
+/** Höchster wählbarer Tag — den 28. hat jeder Monat. */
+const BEGINN_MAX = 28;
+
+/**
+ * Der Block „Monatsbeginn“. Eine Auswahl statt eines Zahlenfelds: es gibt
+ * genau 28 gültige Werte, und keiner davon lässt sich vertippen.
+ *
+ * @param {object} mb  lesen, vorschau(beginn), setzen(beginn)
+ */
+function baueBeginnBlock(mb) {
+  const block = el("section", "e-block");
+  const kopf = el("h3", null, "Monatsbeginn");
+  kopf.append(" ", hinweis(
+    "Wer den Lohn am 25. bekommt, rechnet vom 25. bis und mit dem 24. des Folgemonats. "
+    + "Ein Monat heisst dann nach seinem Zeitraum, etwa „25. Okt – 24. Nov | 2026“. "
+    + "Die Buchungen bleiben, wo sie sind — es ändern sich Bezeichnung, Zeitraum und "
+    + "die Reihenfolge der Tage im Liquiditätsverlauf.",
+    "hinweis-monatsbeginn"));
+  block.append(kopf);
+
+  const label = el("label", "e-beginn", "Ein Monat beginnt am ");
+  const auswahl = el("select");
+  for (let tag = 1; tag <= BEGINN_MAX; tag++) {
+    const o = el("option", null, tag === 1 ? "1. (Kalendermonat)" : tag + ".");
+    o.value = String(tag);
+    auswahl.append(o);
+  }
+  label.append(auswahl);
+  block.append(label);
+
+  const vorschau = el("p", "e-text");
+  vorschau.setAttribute("aria-live", "polite");
+  block.append(vorschau);
+
+  const zeige = (tag) => {
+    vorschau.textContent = "Der gewählte Monat heisst dann: " + mb.vorschau(tag);
+  };
+
+  auswahl.addEventListener("change", () => {
+    const tag = Number(auswahl.value);
+    mb.setzen(tag);
+    zeige(tag);
+  });
+
+  return {
+    block,
+    aktualisiere() {
+      const tag = mb.lesen();
+      auswahl.value = String(tag);
+      zeige(tag);
+    }
+  };
+}
+
+/* ------------------------------------------------------------------ *
  * KI-Zugriff
  * ------------------------------------------------------------------ */
 
@@ -291,6 +349,9 @@ export function baueEinstellungen(aktionen) {
     knopf("Diesen Monat löschen …", () => { dialog.close(); aktionen.monatLoeschen(); })
   ]));
 
+  const beginn = aktionen.monatsbeginn ? baueBeginnBlock(aktionen.monatsbeginn) : null;
+  if (beginn) koerper.append(beginn.block);
+
   koerper.append(knopfgruppe("Daten", "Sicherungen liegen verschlüsselt im Datenordner.", [
     knopf("Verschlüsselte Kopie sichern …", () => aktionen.kopieSichern(false)),
     knopf("Unverschlüsselte Kopie …", () => aktionen.kopieSichern(true)),
@@ -341,6 +402,7 @@ export function baueEinstellungen(aktionen) {
   return {
     oeffnen(info) {
       baueKlassen();
+      beginn?.aktualisiere();
       void kiBlock?.aktualisiere();
       fuss.textContent = info
         ? "Blaubuch " + info.version + " · Daten: " + info.dataPath

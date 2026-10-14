@@ -30,6 +30,9 @@ import {
   STANDARD_KLASSE, TAG_ZU_KLASSE,
   leseKlassen, standardKlassen, klasseVon
 } from "./klassen.mjs";
+import { periodeLabel, periodeVon, leseMonatsbeginn, monatsbeginn } from "./periode.mjs";
+
+export { MONTH_NAMES, monatsbeginn, leseMonatsbeginn } from "./periode.mjs";
 
 export {
   KLASSEN_FARBEN, FARB_KEYS, farbe, WIRKUNGEN, WIRKUNG_TITEL,
@@ -55,11 +58,6 @@ export const EINNAHME_ART_TITEL = {
   sonstige: "Sonstige Mittel",
   durchlauf: "Durchlaufgeld"
 };
-
-export const MONTH_NAMES = [
-  "Januar", "Februar", "März", "April", "Mai", "Juni",
-  "Juli", "August", "September", "Oktober", "November", "Dezember"
-];
 
 /**
  * Kein Limit vorgegeben — die Oberflaeche zeigt dann „Kein Limit gesetzt“.
@@ -104,10 +102,13 @@ export function leseFaelligAm(raw) {
   return Number.isInteger(n) && n >= 1 && n <= 31 ? n : null;
 }
 
-export function monthLabel(key) {
-  const [y, m] = String(key).split("-").map(Number);
-  if (!y || !m || m < 1 || m > 12) return String(key);
-  return MONTH_NAMES[m - 1] + " " + y;
+/**
+ * "Oktober 2026" — oder, wenn der Monat nicht am 1. beginnt, der Zeitraum
+ * ("25. Okt – 24. Nov | 2026"). Wer einen Zustand hat, gibt dessen
+ * Monatsbeginn mit; siehe periode.mjs.
+ */
+export function monthLabel(key, beginn = 1) {
+  return periodeLabel(key, beginn);
 }
 
 export function isMonthKey(key) {
@@ -552,6 +553,9 @@ export function migrate(raw) {
     version: SCHEMA_VERSION,
     updatedAt: typeof raw?.updatedAt === "string" ? raw.updatedAt : new Date().toISOString(),
     currentMonth: null,
+    /* Ohne Formatwechsel: aeltere Fassungen kennen das Feld nicht und
+       rechnen dann mit dem Kalendermonat — die Zahlen bleiben dieselben. */
+    monatsbeginn: leseMonatsbeginn(raw?.monatsbeginn),
     klassen,
     konten,
     months: {}
@@ -656,7 +660,7 @@ export function migrate(raw) {
           notiz: typeof x.notiz === "string" ? x.notiz : ""
         }));
       if (base[liste].length !== list.length) {
-        repariert.push("In " + monthLabel(key) + " wurden "
+        repariert.push("In " + monthLabel(key, state.monatsbeginn) + " wurden "
           + (list.length - base[liste].length) + " unvollständige Zeilen ausgelassen.");
       }
     }
@@ -687,10 +691,10 @@ export function migrate(raw) {
   }
 
   if (Object.keys(state.months).length === 0) {
-    /* Oertlicher Monat, nicht UTC: sonst beginnt eine leere Datei in den
-       ersten Stunden eines Monats noch im Vormonat. */
-    const jetzt = new Date();
-    const key = jetzt.getFullYear() + "-" + String(jetzt.getMonth() + 1).padStart(2, "0");
+    /* Oertliches Datum, nicht UTC: sonst beginnt eine leere Datei in den
+       ersten Stunden eines Monats noch im Vormonat. Und der laufende
+       Zeitraum, nicht der Kalendermonat. */
+    const key = periodeVon(new Date(), state.monatsbeginn);
     state.months[key] = emptyMonth(state);
     state.currentMonth = key;
     return { state, repariert, ausNeuererFassung };
@@ -829,7 +833,7 @@ export function buildInsights(state, monthKey) {
     out.push({
       kind: dRest < 0 ? "warn" : "good",
       parts: [
-        "Vergleich " + monthLabel(keys[idx - 1]) + ": Restwert " + (dRest >= 0 ? "+" : "−"),
+        "Vergleich " + monthLabel(keys[idx - 1], monatsbeginn(state)) + ": Restwert " + (dRest >= 0 ? "+" : "−"),
         { b: formatCHF(Math.abs(dRest)) },
         ", Kosten " + (dKosten >= 0 ? "+" : "−") + formatCHF(Math.abs(dKosten))
       ]
@@ -852,7 +856,7 @@ export function buildReport(state, monthKey) {
   const t = totals(state, month);
   const L = [];
 
-  L.push("Analysiere meine Monatsbuchhaltung " + monthLabel(monthKey) + " (CHF) und gib mir konkrete Spar- und Optimierungstipps:");
+  L.push("Analysiere meine Monatsbuchhaltung " + monthLabel(monthKey, monatsbeginn(state)) + " (CHF) und gib mir konkrete Spar- und Optimierungstipps:");
   L.push("");
 
   L.push("KONTEN (Stand am Monatsende):");

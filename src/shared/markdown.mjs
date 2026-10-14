@@ -18,6 +18,7 @@ import {
   kontoLage, buchungsArt, klasseVon, standardKlassen,
   ZEILEN_LISTEN, EINNAHME_ART_TITEL, KEIN_LIMIT
 } from "./budget.mjs";
+import { monatsbeginn } from "./periode.mjs";
 
 const TITEL = {
   fixkosten: "Fixkosten & Daueraufträge",
@@ -58,6 +59,7 @@ export function buildMarkdown(state) {
   const lage = kontoLage(state);
   const kontoName = (id) => konten.find((k) => k.id === id)?.name ?? "unbekannt";
   const keys = sortedMonths(state ?? { months: {} });
+  const beginn = monatsbeginn(state);
 
   const L = [];
   L.push("# Blaubuch — Auszug über " + keys.length + " Monat" + (keys.length === 1 ? "" : "e"));
@@ -74,7 +76,7 @@ export function buildMarkdown(state) {
     keys.map((key) => {
       const t = totals(state, state.months[key]);
       return [
-        monthLabel(key),
+        monthLabel(key, beginn),
         formatCHF(t.einnahmen),
         formatCHF(t.kosten),
         formatCHF(t.rest),
@@ -91,7 +93,7 @@ export function buildMarkdown(state) {
     const month = state.months[key];
     const t = totals(state, month);
 
-    L.push("## " + monthLabel(key));
+    L.push("## " + monthLabel(key, beginn));
     L.push("");
 
     L.push("### Konten");
