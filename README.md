@@ -2,7 +2,8 @@
 
 Monatsbudget für den Schweizer Alltag. Läuft als Programm auf deinem
 Rechner — kein Konto, keine Anmeldung, keine Netzwerkverbindung. Die Daten
-liegen verschlüsselt in einer Datei, die dir gehört.
+liegen verschlüsselt in einer Datei, die dir gehört. Einzige Ausnahme, und
+nur wenn du sie einschaltest: der [KI-Zugriff](#mit-ki).
 
 Gebaut für die Frage, die eine Tabellenkalkulation schlecht beantwortet:
 **Was bleibt diesen Monat übrig, und woran liegt es?**
@@ -124,6 +125,38 @@ abgezogen. Zeilen müssen dafür nicht gelöscht werden.
 Ein Klick auf den farbigen Punkt links wechselt die Markierung einer Zeile,
 ein Klick auf die Bezeichnung benennt sie um.
 
+## Mit KI
+
+Unter *Einstellungen → KI-Zugriff* lässt sich Blaubuch für eine KI öffnen —
+Claude oder ein lokales Modell, über das *Model Context Protocol* (MCP).
+Die KI kann dann Monate lesen, Analysen und den Monatsbericht abrufen.
+Ändern kann sie in dieser Fassung nichts.
+
+- **Standardmässig aus.**
+- **Was die KI abfragt, geht an den Anbieter des Modells.** Bei Claude ist
+  das Anthropic. Mit einem lokalen Modell bleibt alles auf dem Rechner.
+- Nur auf diesem Rechner (`127.0.0.1`), nur mit dem Zugangsschlüssel aus den
+  Einstellungen und nur, solange Blaubuch entsperrt ist. Gesperrt bekommt
+  die KI keine Zahl.
+- Die Einstellungen zeigen die letzten Abfragen — Werkzeug und Monat, keine
+  Beträge.
+
+Für Claude Code kopiert die Einstellungsseite den fertigen Befehl. Er hat
+diese Form:
+
+```
+claude mcp add --transport http blaubuch http://127.0.0.1:41041/mcp --header "Authorization: Bearer <Schlüssel>"
+```
+
+Der Zugangsschlüssel liegt unverschlüsselt in den Programmeinstellungen
+(`ki.json` im Benutzerordner). Er ist kein Passwort: Bei gesperrtem Tresor
+öffnet er nichts, und *Neuer Schlüssel* macht den alten sofort ungültig.
+
+Blaubuch spricht beide Generationen des Protokolls: bis 2025-11-25 mit
+Handshake und ab 2026-07-28 zustandslos. Der Plan dazu, einschliesslich der
+nächsten Stufe (Vorschläge, die erst nach Zustimmung gelten), steht in
+[docs/1.4.0-plan.md](docs/1.4.0-plan.md).
+
 ## Sicherheit
 
 Die Daten sind mit AES-256-GCM verschlüsselt, der Schlüssel wird per scrypt
@@ -185,7 +218,10 @@ src/
               vault.mjs     Verschlüsselung (nur Hauptprozess)
               password.mjs  Passwortbewertung (auch Oberfläche)
               seed.mjs      Startzustand einer frischen Installation
+              ki.mjs        Werkzeuge für den KI-Zugriff (reine Funktionen)
   main/       main.js       Fenster, Menü, IPC
+              mcp.mjs       MCP-Server: Protokoll, HTTP, Abwehr
+              ki-zugriff.js KI-Zugriff ein/aus, Schlüssel, Stand aus dem Fenster
               store.js      Dateizugriff, Schlüsselhaltung, Löschung
               preload.js    Die vollständige Liste dessen, was die Oberfläche darf
   renderer/   index.html    Gerüst
@@ -208,7 +244,7 @@ kein Node.
 ## Was es nicht kann
 
 - Keine Anbindung an Banken, kein Einlesen von Kontoauszügen.
-- Keine mehreren Konten oder Währungen. Alles ist CHF.
+- Keine Fremdwährungen. Alles ist CHF.
 - Keine Synchronisierung zwischen Geräten. Der Weg dafür ist die
   verschlüsselte Kopie plus *Daten einlesen …*.
 

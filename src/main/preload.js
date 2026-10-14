@@ -69,6 +69,29 @@ contextBridge.exposeInMainWorld("blaubuch", {
   info: () => ipcRenderer.invoke("app:info"),
   confirm: (options) => ipcRenderer.invoke("dialog:confirm", options ?? {}),
 
+  /* ---- KI-Zugriff ---- */
+
+  kiStatus: () => ipcRenderer.invoke("ki:status"),
+  kiEinschalten: () => ipcRenderer.invoke("ki:einschalten"),
+  kiAusschalten: () => ipcRenderer.invoke("ki:ausschalten"),
+  kiNeuerSchluessel: () => ipcRenderer.invoke("ki:neuer-schluessel"),
+  kiPort: (port) => ipcRenderer.invoke("ki:port", port),
+
+  /**
+   * Der Hauptprozess fragt nach dem aktuellen Stand, wenn eine KI liest.
+   * `liefere` gibt den Stand als JSON-Text zurück — oder null, solange
+   * nichts geladen ist. Nur eine Anmeldung; eine zweite ersetzt die erste.
+   */
+  onKiAnfrage: (liefere) => {
+    ipcRenderer.removeAllListeners("ki:stand-anfrage");
+    if (typeof liefere !== "function") return;
+    ipcRenderer.on("ki:stand-anfrage", (_ev, id) => {
+      let text = null;
+      try { text = liefere(); } catch { text = null; }
+      ipcRenderer.send("ki:stand-antwort", { id, text: typeof text === "string" ? text : null });
+    });
+  },
+
   /** Meldet, dass gespeichert ist und geschlossen werden darf. */
   readyToClose: () => ipcRenderer.send("app:ready-to-close"),
 

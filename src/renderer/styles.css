@@ -994,6 +994,37 @@ rect.k-inaktiv, text.k-inaktiv { opacity: 0.45; }
   overflow-wrap: anywhere; border-top: 1px solid var(--line); padding-top: var(--sp-3);
 }
 
+/* KI-Zugriff */
+.e-ki-inhalt { display: grid; gap: var(--sp-2); }
+.e-ki-status { color: var(--ink); font-weight: 600; }
+.e-ki-status code { font-weight: 400; overflow-wrap: anywhere; }
+.e-ki-status.fehler { color: var(--rot); }
+.e-ki-schluessel { display: flex; gap: var(--sp-2); }
+.e-ki-schluessel input,
+.e-ki-port input {
+  border: 1px solid var(--line); background: var(--field); color: var(--ink);
+  border-radius: var(--r-sm); padding: 0.35rem 0.5rem; font: inherit; font-size: var(--text-sm);
+}
+.e-ki-schluessel input { flex: 1; min-width: 0; font-family: ui-monospace, monospace; }
+.e-ki-port { display: flex; align-items: center; gap: var(--sp-2); font-size: var(--text-sm); }
+.e-ki-port input { width: 6.5rem; }
+.e-ki-inhalt h4 {
+  margin: var(--sp-2) 0 0; font-size: var(--text-xs); font-weight: 600; color: var(--ink-mute);
+}
+.e-ki-protokoll {
+  margin: 0; padding: 0; list-style: none; display: grid; gap: 2px;
+  font-family: ui-monospace, monospace; font-size: var(--text-xs); white-space: pre;
+}
+.e-ki-protokoll .leer { font-family: var(--body); color: var(--ink-mute); white-space: normal; }
+
+/* Marke in der Kopfleiste, solange eine KI lesen darf */
+.ki-marke {
+  align-self: center; font-size: var(--text-xs); font-weight: 700; letter-spacing: 0.06em;
+  color: var(--blue-deep); background: var(--blue-soft); border: 1px solid var(--blue-line);
+  border-radius: 999px; padding: 0.1rem 0.5rem;
+}
+.ki-marke.fehler { color: var(--rot); border-color: currentColor; background: transparent; }
+
 /* ------------------------------------------------------------------ *
  * Zugangsbildschirme
  * ------------------------------------------------------------------ */

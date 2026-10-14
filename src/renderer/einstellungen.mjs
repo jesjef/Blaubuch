@@ -111,6 +111,117 @@ function knopf(text, beiKlick, klasse = "btn-tool") {
   return k;
 }
 
+/* ------------------------------------------------------------------ *
+ * KI-Zugriff
+ * ------------------------------------------------------------------ */
+
+const uhrzeit = (iso) => new Date(iso).toLocaleTimeString("de-CH", { hour: "2-digit", minute: "2-digit" });
+
+/**
+ * Der Block „KI-Zugriff“. Baut sich bei jedem Statuswechsel neu — der
+ * Status kommt aus dem Hauptprozess, nicht aus einem Zustand hier.
+ *
+ * @param {object} ki  status, einschalten, ausschalten, neuerSchluessel, port, kopieren, beiStatus
+ */
+function baueKiBlock(ki) {
+  const block = el("section", "e-block e-ki");
+  const kopf = el("h3", null, "KI-Zugriff");
+  kopf.append(" ", hinweis(
+    "Eine KI wie Claude oder ein lokales Modell kann über MCP lesen, was in Blaubuch steht — "
+    + "nur auf diesem Rechner (127.0.0.1), nur mit dem Zugangsschlüssel und nur, solange "
+    + "Blaubuch entsperrt ist. Ändern kann sie in dieser Fassung nichts.",
+    "hinweis-ki"));
+  const inhalt = el("div", "e-ki-inhalt");
+  block.append(kopf, inhalt);
+
+  async function zeige(status) {
+    if (!status) return;
+    ki.beiStatus?.(status);
+    inhalt.textContent = "";
+
+    if (!status.an) {
+      inhalt.append(el("p", "e-text",
+        "Aus. Eingeschaltet kann eine KI deine Monate lesen und auswerten. "
+        + "Mit Claude gehen die abgefragten Zahlen an Anthropic; mit einem lokalen Modell "
+        + "bleibt alles auf diesem Rechner."));
+      const reihe = el("div", "e-reihe");
+      reihe.append(knopf("Einschalten …", async () => zeige(await ki.einschalten())));
+      inhalt.append(reihe);
+      return;
+    }
+
+    const zeile = el("p", "e-text e-ki-status");
+    if (status.fehler) {
+      zeile.classList.add("fehler");
+      zeile.textContent = status.fehler;
+    } else {
+      zeile.textContent = "An · ";
+      zeile.append(el("code", null, status.adresse));
+    }
+    inhalt.append(zeile);
+
+    /* Der Schluessel bleibt verdeckt, bis er gebraucht wird. */
+    const schluessel = el("div", "e-ki-schluessel");
+    const feld = el("input");
+    feld.type = "password";
+    feld.readOnly = true;
+    feld.value = status.token ?? "";
+    feld.setAttribute("aria-label", "Zugangsschlüssel");
+    feld.spellcheck = false;
+    const zeigen = knopf("Anzeigen", () => {
+      const verdeckt = feld.type === "password";
+      feld.type = verdeckt ? "text" : "password";
+      zeigen.textContent = verdeckt ? "Verbergen" : "Anzeigen";
+    });
+    schluessel.append(feld, zeigen);
+    inhalt.append(schluessel);
+
+    const befehl = "claude mcp add --transport http blaubuch " + status.adresse
+      + " --header \"Authorization: Bearer " + status.token + "\"";
+
+    const reihe = el("div", "e-reihe");
+    reihe.append(
+      knopf("Befehl für Claude Code kopieren", () => ki.kopieren(befehl, "Befehl für Claude Code kopiert")),
+      knopf("Schlüssel kopieren", () => ki.kopieren(status.token, "Zugangsschlüssel kopiert")),
+      knopf("Neuer Schlüssel", async () => zeige(await ki.neuerSchluessel())),
+      knopf("Ausschalten", async () => zeige(await ki.ausschalten()))
+    );
+    inhalt.append(reihe);
+
+    const portForm = el("form", "e-ki-port");
+    const portLabel = el("label", null, "Port ");
+    const portFeld = el("input");
+    portFeld.type = "number";
+    portFeld.min = "1024";
+    portFeld.max = "65535";
+    portFeld.value = String(status.port);
+    portLabel.append(portFeld);
+    const portKnopf = el("button", "btn-tool", "Übernehmen");
+    portKnopf.type = "submit";
+    portForm.append(portLabel, portKnopf);
+    portForm.addEventListener("submit", async (ev) => {
+      ev.preventDefault();
+      await zeige(await ki.port(Number(portFeld.value)));
+    });
+    inhalt.append(portForm);
+
+    inhalt.append(el("p", "e-text",
+      "Der Schlüssel liegt unverschlüsselt in den Programmeinstellungen. Er ist kein Passwort: "
+      + "Bei gesperrtem Tresor öffnet er nichts, und „Neuer Schlüssel“ macht den alten sofort ungültig."));
+
+    /* Was gefragt wurde — ohne Beträge, nur im Speicher. */
+    const liste = el("ol", "e-ki-protokoll");
+    liste.setAttribute("aria-label", "Letzte Abfragen");
+    for (const e of (status.protokoll ?? []).slice(0, 10)) {
+      liste.append(el("li", null, uhrzeit(e.zeit) + "  " + e.werkzeug + (e.monat ? "  " + e.monat : "")));
+    }
+    if (liste.childElementCount === 0) liste.append(el("li", "leer", "Noch keine Abfragen."));
+    inhalt.append(el("h4", null, "Letzte Abfragen"), liste);
+  }
+
+  return { block, aktualisiere: async () => zeige(await ki.status()) };
+}
+
 /**
  * Baut den Dialog und gibt eine Funktion zum Öffnen zurück.
  *
@@ -197,6 +308,9 @@ export function baueEinstellungen(aktionen) {
     "Nach dieser Zeit ohne Eingabe wird gespeichert und der Tresor geschlossen. "
     + "Zum Weiterarbeiten ist dann wieder das Passwort nötig."));
 
+  const kiBlock = aktionen.ki ? baueKiBlock(aktionen.ki) : null;
+  if (kiBlock) koerper.append(kiBlock.block);
+
   koerper.append(knopfgruppe("Tresor", "Für ein vergessenes Passwort gibt es keine Wiederherstellung.", [
     knopf("Passwort ändern …", () => { dialog.close(); aktionen.passwort(); }),
     knopf("Jetzt sperren", () => { dialog.close(); aktionen.sperren(); })
@@ -226,6 +340,7 @@ export function baueEinstellungen(aktionen) {
   return {
     oeffnen(info) {
       baueKlassen();
+      void kiBlock?.aktualisiere();
       fuss.textContent = info
         ? "Blaubuch " + info.version + " · Daten: " + info.dataPath
         : "";
