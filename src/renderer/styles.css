@@ -123,7 +123,7 @@
   --amount-w: 5rem;
   --action-w: 1.75rem;
   --spalte-min: 19rem;
-  --inhalt-max: 78rem;
+  --inhalt-max: 96rem;
   --zeile-h: 2.25rem;
 }
 
@@ -369,6 +369,17 @@ section.card > *, .e-reihe > *, .e-wahl > *, main > * { min-width: 0; }
 .sections {
   display: grid; gap: var(--sp-4);
   grid-template-columns: repeat(auto-fit, minmax(var(--spalte-min), 1fr));
+}
+
+/* Höchstens drei Spalten: in einem breiten Fenster sollen die Karten
+   breiter werden, nicht mehr. Die Ausrichtung der Hinweise (3n) und die
+   Reihenfolge der Karten rechnen mit drei. Erst ab 60rem — darunter
+   bricht das Raster wie bisher auf zwei und eine Spalte um. */
+@media (min-width: 60rem) {
+  .sections {
+    grid-template-columns: repeat(auto-fit,
+      minmax(max(var(--spalte-min), calc((100% - 2 * var(--sp-4)) / 3)), 1fr));
+  }
 }
 
 .stat {
