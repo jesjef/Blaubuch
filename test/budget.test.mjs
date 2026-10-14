@@ -101,7 +101,50 @@ test("Sparquote misst am Erwerbseinkommen, nicht an Bestand oder Darlehen", () =
   assert.equal(ohne, 100, "ohne Kosten bleibt alles uebrig");
   assert.equal(mit.erwerb, 5000, "Bestand und Darlehen sind kein Einkommen");
   assert.equal(mit.einnahmen, 10000, "verfuegbare Mittel steigen sehr wohl");
-  assert.ok(mit.sparquote > 100, "die Bezugsgroesse bleibt aber das Einkommen");
+  /* Bis 1.3.1 hielt dieser Test `mit.sparquote > 100` fest: Bestand und
+     Darlehen landeten ueber den Restwert im Zaehler und hoben die Quote auf
+     200 % — genau das, was das README ausschliesst. */
+  assert.equal(mit.sparquote, ohne, "weder Bestand noch Darlehen heben die Quote");
+});
+
+test("wer mehr ausgibt als verdient, hat eine negative Sparquote — auch mit Polster", () => {
+  const monat = leererMonat();
+  fuegeEinnahmeHinzu(monat, "Nettolohn", 5000, "erwerb");
+  anfangsbestand(monat, KONTO_HAUPT, 4000);
+  fuegeEinnahmeHinzu(monat, "Geliehen", 1000, "geliehen");
+  monat.ausgaben.push({ id: "x", name: "Auto", betrag: 6000, klasse: "ausgaben", vonKonto: KONTO_HAUPT, nachKonto: null, aktiv: true });
+  const t = totals(stamm, monat);
+
+  assert.equal(t.rest, 4000, "der Restwert bleibt positiv — das Polster traegt");
+  assert.equal(t.ueberschuss, -1000, "verdient 5000, ausgegeben 6000");
+  assert.equal(t.sparquote, -20);
+});
+
+test("sonstige Mittel zaehlen im Ueberschuss, aber nicht als Bezugsgroesse", () => {
+  const monat = leererMonat();
+  fuegeEinnahmeHinzu(monat, "Nettolohn", 5000, "erwerb");
+  fuegeEinnahmeHinzu(monat, "Rueckerstattung KK", 500, "sonstige");
+  monat.ausgaben.push({ id: "x", name: "Arzt", betrag: 500, klasse: "ausgaben", vonKonto: KONTO_HAUPT, nachKonto: null, aktiv: true });
+  const t = totals(stamm, monat);
+
+  assert.equal(t.ueberschuss, 5000, "die Rueckerstattung gleicht die Arztrechnung aus");
+  assert.equal(t.sparquote, 100);
+});
+
+test("die Analyse nennt den Ueberschuss, nicht den Restwert", () => {
+  const state = beispielState();
+  const monat = state.months[state.currentMonth];
+  monat.einnahmen = [];
+  fuegeEinnahmeHinzu(monat, "Nettolohn", 5000, "erwerb");
+  anfangsbestand(monat, KONTO_HAUPT, 4000);
+  const t = totals(state, monat);
+  const zeile = buildInsights(state, state.currentMonth)
+    .map((i) => i.parts.map((p) => (typeof p === "string" ? p : p.b)).join(""))
+    .find((s) => s.startsWith("Sparquote"));
+
+  assert.ok(zeile, "die Sparquote erscheint in der Analyse");
+  assert.ok(norm(zeile).includes(norm(formatCHF(t.ueberschuss)) + " von "), zeile);
+  assert.ok(!norm(zeile).includes(norm(formatCHF(t.rest)) + " von "), "der Restwert enthaelt den Bestand");
 });
 
 test("ein frischer Monat kennt jedes Konto, aber noch keine Einnahmezeile", () => {
@@ -378,7 +421,9 @@ test("Bericht nennt Einkommen und Bestand getrennt", () => {
   assert.ok(bericht.includes("KONTEN (Stand am Monatsende)"), "die Konten stehen jetzt oben");
   assert.ok(bericht.includes("Nettolohn → Kontostand"), "jede Einnahme nennt ihr Zielkonto");
   assert.ok(bericht.includes("RESTWERT: 2'800.00 Fr."));
-  assert.ok(bericht.includes("Sparquote auf Erwerbseinkommen: 53.8%"));
+  /* Bis 1.3.1 stand hier 53.8 % = 2'800 / 5'200 — darin steckten die 400
+     Bestand. Verdient 5'200, ausgegeben 2'800: 2'400 / 5'200. */
+  assert.ok(bericht.includes("Sparquote auf Erwerbseinkommen: 46.2%"));
 });
 
 test("Bericht kommt mit einem leeren Monat zurecht", () => {
@@ -476,4 +521,15 @@ test("nach dem Löschen wird der Nachbarmonat gezeigt, nicht der älteste", () =
 
   assert.equal(nachbarMonat(["2026-08"], "2026-08"), null, "war es der letzte, bleibt nichts");
   assert.equal(nachbarMonat([], "2026-08"), null);
+});
+
+test("eine leere Datei beginnt im oertlichen Monat, nicht im UTC-Monat", (t) => {
+  /* 1. Oktober, 00:30 in Zuerich — in UTC noch der 30. September. */
+  const tz = process.env.TZ;
+  process.env.TZ = "Europe/Zurich";
+  t.after(() => { if (tz === undefined) delete process.env.TZ; else process.env.TZ = tz; });
+  t.mock.timers.enable({ apis: ["Date"], now: new Date("2026-09-30T22:30:00Z") });
+
+  assert.equal(currentMonthKey(), "2026-10", "Voraussetzung: die Zeitzone greift");
+  assert.equal(migrate(null).state.currentMonth, "2026-10");
 });
