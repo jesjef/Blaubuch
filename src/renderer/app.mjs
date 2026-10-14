@@ -10,7 +10,7 @@ import {
   SCHEMA_VERSION, EINNAHME_ARTEN, EINNAHME_ART_TITEL,
   formatCHF, parseAmount, monthLabel, isMonthKey, nextMonthKey, sortedMonths,
   totals, buildInsights, buildReport, migrate, monthFromPrevious, uid, nachbarMonat,
-  kontoSaldo, istUmbuchung, leseFaelligAm,
+  kontoSaldo, kontoLage, buchungsArt, leseFaelligAm,
   STANDARD_KLASSE, WIRKUNG_TITEL, WIRKUNGEN, klasseVon, FARB_KEYS, farbe
 } from "../shared/budget.mjs";
 import { createSeedState } from "../shared/seed.mjs";
@@ -53,7 +53,6 @@ const announce = (text) => { liveEl.textContent = text; };
 const currentMonth = () => state.months[state.currentMonth];
 
 /* Konten sind Stammdaten — diese Griffe braucht fast jede Karte. */
-const kontoIdSet = () => new Set((state?.konten ?? []).map((k) => k.id));
 const aktiveKonten = () => (state?.konten ?? []).filter((k) => k.aktiv !== false);
 const erstesAktivesKonto = () => aktiveKonten()[0]?.id ?? state?.konten?.[0]?.id ?? null;
 
@@ -450,7 +449,9 @@ function listRow(item, list, listenName) {
   marke.title = "Geht auf ein eigenes Konto — zählt nicht als Kosten";
 
   const zeigeUmbuchung = () => {
-    const ist = istUmbuchung(item, kontoIdSet());
+    /* Nur echte Umbuchungen: eine Ablage aufs ausgeblendete Konto
+       zaehlt sehr wohl als Kosten. */
+    const ist = buchungsArt(item, kontoLage(state)) === "umbuchung";
     block.classList.toggle("umbuchung", ist);
     marke.hidden = !ist;
   };
